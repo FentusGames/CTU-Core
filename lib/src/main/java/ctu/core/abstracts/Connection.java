@@ -267,7 +267,7 @@ public abstract class Connection extends CTURunnable {
 		}
 	}
 
-	public void sendTCP(final Packet packet) {
+	public int sendTCP(final Packet packet) {
 		byte[] header = new byte[3];
 
 		for (final ListIterator<Class<?>> iterator = ctu.getClazzes().listIterator(); iterator.hasNext();) {
@@ -300,6 +300,8 @@ public abstract class Connection extends CTURunnable {
 		} catch (final IOException e) {
 			setRunning(false);
 		}
+		
+		return bytes.length;
 	}
 
 	public void setCrypt(Crypt crypt) {
