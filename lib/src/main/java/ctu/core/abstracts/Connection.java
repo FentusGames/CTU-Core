@@ -153,7 +153,7 @@ public abstract class Connection extends CTURunnable {
 	}
 
 	public Socket getSocket() {
-		return getSocket();
+		return ctu.getSocket();
 	}
 
 	public byte[] recvTCP() {

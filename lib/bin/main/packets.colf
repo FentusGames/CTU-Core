@@ -1,0 +1,12 @@
+package packets
+
+type PacketPing struct {
+}
+
+type PacketServerPublicKey struct {
+	serverPublicKey binary
+}
+
+type PacketClientSecretKey struct {
+	clientSecretKey binary
+}
