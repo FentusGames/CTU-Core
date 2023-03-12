@@ -12,6 +12,7 @@ To get started with CTU-Core, follow these steps:
 
 Alternatively, you can use Gradle by adding the following code to your project:
 
+## Client
 ```groovy
 repositories {
       maven { url 'https://jitpack.io' }
@@ -20,6 +21,18 @@ repositories {
 dependencies {
       implementation 'com.github.FentusGames:CTU-Core:1.0'
       implementation 'com.github.FentusGames:CTU-Client:1.0'
+}
+```
+
+## Server
+```groovy
+repositories {
+      maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+      implementation 'com.github.FentusGames:CTU-Core:1.0'
+      implementation 'com.github.FentusGames:CTU-Server:1.0'
 }
 ```
 
