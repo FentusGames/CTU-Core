@@ -27,14 +27,7 @@ dependencies {
     implementation 'com.google.guava:guava:30.1.1-jre'
 }
 
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src/main/java']
-        }
-    }
-}
-
-jar {
-    from sourceSets.main.java.srcDirs
+java {
+	withSourcesJar()
+	withJavadocJar()
 }
