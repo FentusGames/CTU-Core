@@ -34,6 +34,12 @@ public abstract class CTU extends CTURunnable {
 			executorService.execute(ctuRunnable);
 		}
 	}
+	
+	public void execute(Runnable runnable) {
+		if (!executorService.isShutdown()) {
+			executorService.execute(runnable);
+		}
+	}
 
 	public void executorStop() {
 		threads.forEach(ctuRunnable -> {
