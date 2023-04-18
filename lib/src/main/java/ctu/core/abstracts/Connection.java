@@ -1,68 +1,57 @@
 package ctu.core.abstracts;
 
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
-import java.io.StreamCorruptedException;
 import java.lang.reflect.InvocationTargetException;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
+import java.net.InetSocketAddress;
 import java.nio.BufferUnderflowException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.InputMismatchException;
-import java.util.ListIterator;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
-import javax.net.ssl.SSLException;
-
-import ctu.core.Act;
 import ctu.core.interfaces.Compression;
-import ctu.core.interfaces.Crypt;
-import ctu.core.interfaces.Listener;
-import ctu.core.threads.CTURunnable;
+import ctu.core.logger.Log;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.socket.DatagramPacket;
 
-public abstract class Connection extends CTURunnable {
-	private CTU ctu;
+/**
+ * @author Fentus
+ * 
+ *         The Connection class is an abstract class that provides methods to handle connection data such as
+ *         compression, decompression, sending TCP and UDP packets, and converting bytes to packets. The class also
+ *         contains a list of acceptable classes that it can check against.
+ */
+public abstract class Connection extends SimpleChannelInboundHandler<ByteBuf> {
+	// This field is a list of acceptable classes that the Connection class can check against when handling packets.
+	private HashMap<Integer, Class<?>> clazzesIntegerClazz = new HashMap<>();
+	private HashMap<String, Integer> clazzesStringInteger = new HashMap<>();
 
-	public enum Mode {
-		SERVER, CLIENT
+	// This field is an instance of the ChannelHandlerContext class that represents the context of the Netty channel.
+	// It is used to send packets to the remote address.
+	private ChannelHandlerContext ctx;
+
+	@Override
+	public void channelActive(ChannelHandlerContext ctx) throws Exception {
+		this.ctx = ctx;
 	}
 
-	private long cid = 0;
-	private long sid = -1;
-
-	private DataOutputStream dataOutputStream;
-	private DataInputStream dataInputStream;
-
-	private Crypt crypt = new Crypt() {
-	};
-
-	private Compression compression = new Compression() {
-		@Override
-		public byte[] compress(byte[] bytes) throws IOException {
-			return compressByteArray(bytes);
-		}
-
-		@Override
-		public byte[] decompress(byte[] bytes) throws IOException {
-			return decompressByteArray(bytes);
-		}
-	};
-
-	private int padding = 0;
-
-	private Mode mode = Mode.CLIENT;
-
-	private Object object;
-
-	public Connection(CTU ctu) {
-		this.ctu = ctu;
-	}
-
+	/**
+	 * This method takes an array of bytes and converts it into a Packet object. It returns null if the bytes array is
+	 * null or has a length of 0. Otherwise, it extracts the index and the associated class from the list of acceptable
+	 * classes based on the index. Then, it instantiates the class and uses its unmarshal() method to deserialize the
+	 * packet data. The deserialization is performed by first decompressing the byte array and then calling the
+	 * unmarshal() method.
+	 * 
+	 * @param  bytes
+	 * @return
+	 */
 	public Packet bytesToPacket(byte[] bytes) {
 		if (bytes == null || bytes.length == 0) {
 			return null;
@@ -76,209 +65,109 @@ public abstract class Connection extends CTURunnable {
 
 		int id = (index[0] & 0xFF);
 
-		if (id < 0 || id > ctu.getClazzes().size()) {
-			System.out.println("Index out of range.");
+		if (id < 0 || id > clazzesIntegerClazz.size()) {
+			Log.debug("Index out of range.");
 			return null;
 		}
 
-		final Class<?> clazz = ctu.getClazzes().get(id);
+		final Class<?> clazz = clazzesIntegerClazz.get(id);
 
 		Packet packet = null;
-		boolean process = true;
 
 		try {
 			packet = (Packet) clazz.getConstructor().newInstance();
-		} catch (final InstantiationException e) {
-			process = false;
+			packet.unmarshal(compression.decompress(Arrays.copyOfRange(bytes, 3, bytes.length)), 0);
+		} catch (final InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException | SecurityException | BufferUnderflowException e) {
 			e.printStackTrace();
-		} catch (final IllegalAccessException e) {
-			process = false;
-			e.printStackTrace();
-		} catch (final IllegalArgumentException e) {
-			process = false;
-			e.printStackTrace();
-		} catch (final InvocationTargetException e) {
-			process = false;
-			e.printStackTrace();
-		} catch (final NoSuchMethodException e) {
-			process = false;
-			e.printStackTrace();
-		} catch (final SecurityException e) {
-			process = false;
-			e.printStackTrace();
-		} finally {
-			if (process) {
-				try {
-					packet.unmarshal(compression.decompress(crypt.decrypt(Arrays.copyOfRange(bytes, 3, bytes.length))), 0);
-				} catch (BufferUnderflowException e) {
-					process = false;
-					System.out.println("Process stopped underflow detected.");
-				} catch (InputMismatchException e) {
-				} catch (IOException e) {
-				}
-			}
+		} catch (final InputMismatchException | IOException e) {
 		}
 
 		return packet;
 	}
 
-	public Crypt getCrypt() {
-		return crypt;
-	}
+	/**
+	 * This field is an instance of the Compression interface that provides methods for compressing and decompressing
+	 * data. It is used to compress and decompress packet data before and after transmission.
+	 */
+	private Compression compression = new Compression() {
+		@Override
+		public byte[] compress(byte[] bytes) throws IOException {
+			ByteArrayOutputStream baos = null;
+			Deflater dfl = new Deflater();
 
-	public DataInputStream getDataInputStream() {
-		return dataInputStream;
-	}
+			dfl.setLevel(Deflater.FILTERED);
+			dfl.setInput(bytes);
+			dfl.finish();
 
-	public DataOutputStream getDataOutputStream() {
-		return dataOutputStream;
-	}
+			baos = new ByteArrayOutputStream();
 
-	public long getCID() {
-		if (cid == 0) {
-			mode = Mode.CLIENT;
-		} else {
-			mode = Mode.SERVER;
-		}
+			byte[] tmp = new byte[4 * 1024];
 
-		return cid;
-	}
-
-	public long getSID() {
-		return sid;
-	}
-
-	public Mode getMode() {
-		return mode;
-	}
-
-	public Socket getSocket() {
-		return ctu.getSocket();
-	}
-
-	public byte[] recvTCP() {
-		byte[] bytes = null;
-
-		try {
-			byte[] size = new byte[2];
-
-			dataInputStream.read(size);
-
-			int length = (size[0] & 0xFF) << 8 | (size[1] & 0xFF) + 1;
-
-			byte[] data = new byte[length];
-
-			dataInputStream.read(data);
-
-			bytes = new byte[size.length + data.length];
-
-			System.arraycopy(size, 0, bytes, 0, size.length);
-			System.arraycopy(data, 0, bytes, size.length, data.length);
-		} catch (final SocketException e) {
-			for (final Listener listener : ctu.getListeners()) {
-				listener.reset(this);
-			}
-			setRunning(false);
-		} catch (final SocketTimeoutException e) {
-			for (final Listener listener : ctu.getListeners()) {
-				listener.timeout(this);
-			}
-			setRunning(false);
-		} catch (final EOFException e) {
-			e.printStackTrace();
-			setRunning(false);
-		} catch (final IOException e) {
-			e.printStackTrace();
-			setRunning(false);
-		}
-
-		return bytes;
-	}
-
-	@Override
-	public void exec() {
-		try {
-			ctu.getSocket().setSoTimeout(ctu.getConfig().TIMEOUT);
-		} catch (final SocketException e) {
-			setRunning(false);
-			e.printStackTrace();
-		} finally {
 			try {
-				dataOutputStream = new DataOutputStream(ctu.getSocket().getOutputStream());
+				while (!dfl.finished()) {
+					int size = dfl.deflate(tmp);
+					baos.write(tmp, 0, size);
+				}
+			} catch (Exception ex) {
 
-				setDataOutputStream(getDataOutputStream());
-			} catch (final SocketTimeoutException e) {
-				setRunning(false);
-				e.printStackTrace();
-			} catch (final StreamCorruptedException e) {
-				setRunning(false);
-				e.printStackTrace();
-			} catch (final SSLException e) {
-				setRunning(false);
-				e.printStackTrace();
-			} catch (final SocketException e) {
-				setRunning(false);
-				e.printStackTrace();
-			} catch (final IOException e) {
-				setRunning(false);
-				e.printStackTrace();
 			} finally {
 				try {
-					dataInputStream = new DataInputStream(ctu.getSocket().getInputStream());
-
-					setDataInputStream(getDataInputStream());
-				} catch (final SocketTimeoutException e) {
-					setRunning(false);
-					e.printStackTrace();
-				} catch (final StreamCorruptedException e) {
-					setRunning(false);
-					e.printStackTrace();
-				} catch (final SSLException e) {
-					setRunning(false);
-					e.printStackTrace();
-				} catch (final SocketException e) {
-					setRunning(false);
-					e.printStackTrace();
-				} catch (final IOException e) {
-					setRunning(false);
-					e.printStackTrace();
-				} finally {
-					for (final Listener listener : ctu.getListeners()) {
-						listener.postConnect(this);
-					}
-
-					for (final Listener listener : ctu.getListeners()) {
-						listener.connected(this);
-					}
-
-					while (ctu.isRunning() && isRunning()) {
-						final byte[] bytes = recvTCP();
-
-						if (bytes != null) {
-							ctu.execute(new Act(this, bytes));
-						}
-					}
-
-					for (final Listener listener : ctu.getListeners()) {
-						listener.disconnected(this);
-					}
+					if (baos != null)
+						baos.close();
+				} catch (Exception ex) {
 				}
 			}
-		}
-	}
 
-	public int sendTCP(final Packet packet) {
+			return baos.toByteArray();
+		}
+
+		@Override
+		public byte[] decompress(byte[] bytes) throws IOException {
+			ByteArrayOutputStream baos = null;
+			Inflater iflr = new Inflater();
+
+			iflr.setInput(bytes);
+
+			baos = new ByteArrayOutputStream();
+
+			byte[] tmp = new byte[4 * 1024];
+
+			try {
+				while (!iflr.finished()) {
+					int size = iflr.inflate(tmp);
+					baos.write(tmp, 0, size);
+				}
+			} catch (Exception ex) {
+
+			} finally {
+				try {
+					if (baos != null)
+						baos.close();
+				} catch (Exception ex) {
+				}
+			}
+
+			return baos.toByteArray();
+		}
+	};
+
+	/**
+	 * This method sends a UDP packet containing the given Packet object. It first creates a byte array that contains a
+	 * header and the packet data. The header consists of two bytes that specify the length of the data and one byte
+	 * that represents the index of the associated class in the list of acceptable classes. The method then creates a
+	 * DatagramPacket object and sends it to the remote address using the Netty channel.
+	 * 
+	 * @param packet
+	 * @return 
+	 */
+	public int sendUDP(Packet packet) {
 		byte[] header = new byte[3];
 
-		for (final ListIterator<Class<?>> iterator = ctu.getClazzes().listIterator(); iterator.hasNext();) {
-			final int sentIndex = iterator.nextIndex();
-			if (iterator.next().isInstance(packet)) {
-				System.arraycopy(new byte[] { (byte) sentIndex }, 0, header, 2, 1);
-				break;
-			}
-		}
+		int key = clazzesStringInteger.get(packet.getClass().getSimpleName());
 
-		byte[] data = packet.getData(crypt, compression, ctu.getConfig());
+		System.arraycopy(new byte[] { (byte) key }, 0, header, 2, 1);
+
+		byte[] data = packet.getData(compression);
 
 		System.arraycopy(new byte[] { (byte) (data.length >>> 8), (byte) data.length }, 0, header, 0, 2);
 
@@ -287,114 +176,72 @@ public abstract class Connection extends CTURunnable {
 		System.arraycopy(header, 0, bytes, 0, header.length);
 		System.arraycopy(data, 0, bytes, header.length, data.length);
 
-		try {
-			if (this.dataOutputStream != null) {
-				System.out.println((mode == Mode.CLIENT) ? String.format("[SENDING] %s [%s] to server.", packet.getClass().getSimpleName(), bytes.length, cid) : String.format("[SENDING] %s [%s] to client #%s (SID: %s).", packet.getClass().getSimpleName(), bytes.length, cid, sid));
-
-				this.dataOutputStream.write(bytes);
-			}
-		} catch (final SSLException e) {
-			setRunning(false);
-		} catch (final SocketException e) {
-			setRunning(false);
-		} catch (final IOException e) {
-			setRunning(false);
+		DatagramPacket datagramPacket = new DatagramPacket(Unpooled.copiedBuffer(bytes), (InetSocketAddress) ctx.channel().remoteAddress());
+		if (ctx == null) {
+			Log.debug("Failed to send TCP packet: Not connected yet.");
+		} else {
+			ctx.writeAndFlush(datagramPacket);
 		}
 		
 		return bytes.length;
 	}
 
-	public void setCrypt(Crypt crypt) {
-		this.crypt = crypt;
-	}
+	/**
+	 * This method sends a TCP packet containing the given Packet object. It creates a byte array that contains a header
+	 * and the packet data, where the header is the same as in the sendUDP() method. The method then sends the data
+	 * using the Netty channel.
+	 * 
+	 * @param packet
+	 * @return 
+	 */
+	public int sendTCP(Packet packet) {
+		byte[] header = new byte[3];
 
-	public void setCompression(Compression compression) {
-		this.compression = compression;
-	}
+		int key = clazzesStringInteger.get(packet.getClass().getSimpleName());
 
-	public void setCID(int cid) {
-		this.cid = cid;
-	}
+		System.arraycopy(new byte[] { (byte) key }, 0, header, 2, 1);
 
-	public void setSID(long sid) {
-		this.sid = sid;
-	}
+		byte[] data = packet.getData(compression);
 
-	public void setPadding(int padding) {
-		this.padding = padding;
-	}
+		System.arraycopy(new byte[] { (byte) (data.length >>> 8), (byte) data.length }, 0, header, 0, 2);
 
-	public void start() {
-		ctu.execute(this);
-	}
+		byte[] bytes = new byte[header.length + data.length];
 
-	public Object getConnObject() {
-		return object;
-	}
+		System.arraycopy(header, 0, bytes, 0, header.length);
+		System.arraycopy(data, 0, bytes, header.length, data.length);
 
-	public void setConnObject(Object object) {
-		this.object = object;
-	}
+		if (ctx == null) {
+			Log.debug("Failed to send TCP packet: Not connected yet.");
+		} else {
+			ChannelFuture future = ctx.writeAndFlush(Unpooled.copiedBuffer(bytes));
 
-	public CTU getCtu() {
-		return ctu;
-	}
-
-	public byte[] compressByteArray(byte[] bytes) {
-		ByteArrayOutputStream baos = null;
-		Deflater dfl = new Deflater();
-
-		dfl.setLevel(Deflater.FILTERED);
-		dfl.setInput(bytes);
-		dfl.finish();
-
-		baos = new ByteArrayOutputStream();
-
-		byte[] tmp = new byte[4 * 1024];
-
-		try {
-			while (!dfl.finished()) {
-				int size = dfl.deflate(tmp);
-				baos.write(tmp, 0, size);
-			}
-		} catch (Exception ex) {
-
-		} finally {
-			try {
-				if (baos != null)
-					baos.close();
-			} catch (Exception ex) {
-			}
+			future.addListener(new ChannelFutureListener() {
+				@Override
+				public void operationComplete(ChannelFuture future) {
+					if (!future.isSuccess()) {
+						Log.debug("Failed to send TCP packet: " + future.cause().getMessage());
+					}
+				}
+			});
 		}
-
-		return baos.toByteArray();
+		
+		return bytes.length;
 	}
 
-	public byte[] decompressByteArray(byte[] bytes) {
-		ByteArrayOutputStream baos = null;
-		Inflater iflr = new Inflater();
+	/**
+	 * This method is used to set the list of acceptable classes that the Connection class can check against. It takes
+	 * an ArrayList of Class<?> as a parameter and assigns it to the "clazzes" member variable of the Connection class.
+	 * 
+	 * @param clazzes
+	 */
+	public void setClazzes(HashMap<Integer, Class<?>> clazzes) {
+		clazzes.forEach((key, value) -> {
+			String name = value.getSimpleName();
 
-		iflr.setInput(bytes);
+			Log.debug(String.format("Packet %s set to key %s", name, key));
 
-		baos = new ByteArrayOutputStream();
-
-		byte[] tmp = new byte[4 * 1024];
-
-		try {
-			while (!iflr.finished()) {
-				int size = iflr.inflate(tmp);
-				baos.write(tmp, 0, size);
-			}
-		} catch (Exception ex) {
-
-		} finally {
-			try {
-				if (baos != null)
-					baos.close();
-			} catch (Exception ex) {
-			}
-		}
-
-		return baos.toByteArray();
+			clazzesIntegerClazz.put(key, value);
+			clazzesStringInteger.put(name, key);
+		});
 	}
 }
