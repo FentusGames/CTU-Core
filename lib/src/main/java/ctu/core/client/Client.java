@@ -216,4 +216,8 @@ public class Client implements Runnable {
 			e.printStackTrace();
 		}
 	}
+	
+	public ScheduledExecutorService getExecutorService() {
+		return executorService;
+	}
 }

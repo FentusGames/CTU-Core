@@ -4,8 +4,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 import javax.net.ssl.SSLException;
 
@@ -40,7 +40,7 @@ import io.netty.handler.timeout.WriteTimeoutHandler;
  */
 public class Server implements Runnable {
 	// Creating a thread pool with a cached pool of threads.
-	private final ExecutorService executorService = Executors.newCachedThreadPool();
+	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(32);
 
 	private final ConcurrentHashMap<Long, ServerConnectionHandler> connectionMap = new ConcurrentHashMap<>();
 
@@ -150,7 +150,6 @@ public class Server implements Runnable {
 				}
 			});
 
-			
 			ChannelFuture future = null;
 
 			// Bind server to the specified port
@@ -185,5 +184,9 @@ public class Server implements Runnable {
 
 	public ArrayList<Listener> getListeners() {
 		return listeners;
+	}
+
+	public ScheduledExecutorService getExecutorService() {
+		return executorService;
 	}
 }
