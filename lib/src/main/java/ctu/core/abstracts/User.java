@@ -10,31 +10,5 @@ package ctu.core.abstracts;
  * @param  <T>
  */
 public class User<T> {
-	private long connectionID = -1;
-	private long userID = -1;
-	private T connectionObject = null;
-
-	public void setConnectionID(long connectionID) {
-		this.connectionID = connectionID;
-	}
-
-	public long getConnectionID() {
-		return connectionID;
-	}
-
-	public void setUserID(long userID) {
-		this.userID = userID;
-	}
-
-	public long getUserID() {
-		return userID;
-	}
-
-	public void setConnectionObject(T connectionObject) {
-		this.connectionObject = connectionObject;
-	}
-
-	public T getConnectionObject() {
-		return connectionObject;
-	}
+	
 }
