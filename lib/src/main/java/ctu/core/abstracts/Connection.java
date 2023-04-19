@@ -34,13 +34,11 @@ public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf>
 	private HashMap<Integer, Class<?>> clazzesIntegerClazz = new HashMap<>();
 	private HashMap<String, Integer> clazzesStringInteger = new HashMap<>();
 
+	private User<T> user = new User<T>();
+
 	// This field is an instance of the ChannelHandlerContext class that represents the context of the Netty channel.
 	// It is used to send packets to the remote address.
 	private ChannelHandlerContext ctx;
-
-	private long connectionID = -1;
-	private long userID = -1;
-	private T connectionObject = null;
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {
@@ -250,27 +248,11 @@ public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf>
 		});
 	}
 
-	public void setConnectionID(long connectionID) {
-		this.connectionID = connectionID;
+	public void setUser(User<T> user) {
+		this.user = user;
 	}
 
-	public long getConnectionID() {
-		return connectionID;
-	}
-
-	public void setUserID(long userID) {
-		this.userID = userID;
-	}
-
-	public long getUserID() {
-		return userID;
-	}
-
-	public void setConnectionObject(T connectionObject) {
-		this.connectionObject = connectionObject;
-	}
-
-	public T getConnectionObject() {
-		return connectionObject;
+	public User<T> getUser() {
+		return user;
 	}
 }
