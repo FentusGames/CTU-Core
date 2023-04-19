@@ -261,7 +261,7 @@ public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf>
 		this.connectionObject = connectionObject;
 	}
 
-	public Object getConnectionObject() {
+	public T getConnectionObject() {
 		return connectionObject;
 	}
 }
