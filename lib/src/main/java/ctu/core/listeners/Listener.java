@@ -12,7 +12,7 @@ import ctu.core.abstracts.Packet;
  * @author     Fentus
  * @param  <T>
  */
-public abstract class Listener<T> {
+public abstract interface Listener<T> {
 	// This method is called when a connection is established and becomes active. It takes a "Connection" object as a
 	// parameter, which represents the connection that became active.
 	public abstract void channelActive(Connection<T> connection);
