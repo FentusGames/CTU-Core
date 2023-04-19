@@ -11,16 +11,17 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 
 /**
- * @author Fentus
+ * @author     Fentus
  * 
- *         The ServerConnectionHandler class represents a connection handler for a server that communicates with clients
- *         over SSL/TLS for secure communication. It extends the Connection class and implements methods for handling
- *         active and inactive channels, exceptions, and reading from channels.\
+ *             The ServerConnectionHandler class represents a connection handler for a server that communicates with
+ *             clients over SSL/TLS for secure communication. It extends the Connection class and implements methods for
+ *             handling active and inactive channels, exceptions, and reading from channels.\
+ * @param  <T>
  */
-public class ServerConnectionHandler extends Connection {
-	private Server server;
+public class ServerConnectionHandler<T> extends Connection<T> {
+	private Server<T> server;
 
-	public ServerConnectionHandler(Server server) {
+	public ServerConnectionHandler(Server<T> server) {
 		this.server = server;
 	}
 
@@ -64,7 +65,7 @@ public class ServerConnectionHandler extends Connection {
 	}
 
 	private synchronized long getConnectionId(Channel channel) {
-		for (Map.Entry<Long, ServerConnectionHandler> entry : server.getConnectionMap().entrySet()) {
+		for (Map.Entry<Long, ServerConnectionHandler<T>> entry : server.getConnectionMap().entrySet()) {
 			if (entry.getValue() == channel) {
 				return entry.getKey();
 			}

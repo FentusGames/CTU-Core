@@ -25,11 +25,11 @@ import io.netty.channel.ChannelHandlerContext;
  *         all registered listeners. The exceptionCaught method handles exceptions caused by the channel and notifies
  *         all registered listeners of the exception.
  */
-public class ClientConnectionHandler extends Connection {
-	private ArrayList<Listener> listeners = new ArrayList<>();
-	private Client client;
+public class ClientConnectionHandler<T> extends Connection<T> {
+	private ArrayList<Listener<T>> listeners = new ArrayList<>();
+	private Client<T> client;
 
-	public ClientConnectionHandler(Client client) {
+	public ClientConnectionHandler(Client<T> client) {
 		this.client = client;
 	}
 
@@ -83,11 +83,11 @@ public class ClientConnectionHandler extends Connection {
 		Log.debug("Connection closed by server: " + cause.getMessage());
 	}
 
-	public void addListener(Listener listener) {
+	public void addListener(Listener<T> listener) {
 		listeners.add(listener);
 	}
 
-	public void removeListener(Listener listener) {
+	public void removeListener(Listener<T> listener) {
 		listeners.remove(listener);
 	}
 }

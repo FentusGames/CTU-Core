@@ -32,14 +32,15 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 
 /**
- * @author Fentus
+ * @author     Fentus
  * 
- *         The Client class represents a client that connects to a server via SSL/TLS for secure communication. It
- *         initializes an SSL context with the specified SSL provider, protocols, and trust manager during construction.
- *         The start() method starts the client with the specified SSL context and ensures that SSL/TLS is being used
- *         and that the connection was successful.
+ *             The Client class represents a client that connects to a server via SSL/TLS for secure communication. It
+ *             initializes an SSL context with the specified SSL provider, protocols, and trust manager during
+ *             construction. The start() method starts the client with the specified SSL context and ensures that
+ *             SSL/TLS is being used and that the connection was successful.
+ * @param  <T>
  */
-public class Client implements Runnable {
+public class Client<T> implements Runnable {
 	// Creating a thread pool with a cached pool of threads.
 	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(32);
 
@@ -49,7 +50,7 @@ public class Client implements Runnable {
 	private SslContext sslCtx;
 	private long ping = 0;
 
-	private final ClientConnectionHandler connectionHandler = new ClientConnectionHandler(this);
+	private final ClientConnectionHandler<T> connectionHandler = new ClientConnectionHandler<T>(this);
 	private HashMap<Integer, Class<?>> clazzes = new HashMap<>();
 
 	private Integer key = 0;
@@ -182,15 +183,15 @@ public class Client implements Runnable {
 		}
 	}
 
-	public Client getClient() {
+	public Client<T> getClient() {
 		return this;
 	}
 
-	public void addListener(Listener listener) {
+	public void addListener(Listener<T> listener) {
 		connectionHandler.addListener(listener);
 	}
 
-	public void removeLitener(Listener listener) {
+	public void removeLitener(Listener<T> listener) {
 		connectionHandler.removeListener(listener);
 	}
 
@@ -216,7 +217,7 @@ public class Client implements Runnable {
 			e.printStackTrace();
 		}
 	}
-	
+
 	public ScheduledExecutorService getExecutorService() {
 		return executorService;
 	}

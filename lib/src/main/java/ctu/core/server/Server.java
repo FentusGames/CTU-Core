@@ -30,19 +30,20 @@ import io.netty.handler.timeout.WriteTimeoutHandler;
 
 /**
  * 
- * @author Fentus
+ * @author     Fentus
  * 
- *         The Server class represents a server that listens for incoming client connections and handles them. It is
- *         constructed with the specified port number, and the SSL context is initialized during construction with the
- *         server's certificate and private key for secure communication. To start the server, call the start() method,
- *         which binds the server to the specified port, starts the event loop groups, and initializes the handlers for
- *         incoming client connections.
+ *             The Server class represents a server that listens for incoming client connections and handles them. It is
+ *             constructed with the specified port number, and the SSL context is initialized during construction with
+ *             the server's certificate and private key for secure communication. To start the server, call the start()
+ *             method, which binds the server to the specified port, starts the event loop groups, and initializes the
+ *             handlers for incoming client connections.
+ * @param  <T>
  */
-public class Server implements Runnable {
+public class Server<T> implements Runnable {
 	// Creating a thread pool with a cached pool of threads.
 	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(32);
 
-	private final ConcurrentHashMap<Long, ServerConnectionHandler> connectionMap = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<Long, ServerConnectionHandler<T>> connectionMap = new ConcurrentHashMap<>();
 
 	private final EventLoopGroup bossGroup = new NioEventLoopGroup();
 	private final EventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -55,7 +56,7 @@ public class Server implements Runnable {
 
 	private HashMap<Integer, Class<?>> clazzes = new HashMap<>();
 
-	private ArrayList<Listener> listeners = new ArrayList<>();
+	private ArrayList<Listener<T>> listeners = new ArrayList<>();
 
 	private int key = 0;
 
@@ -82,7 +83,7 @@ public class Server implements Runnable {
 		}
 	}
 
-	private Server getServer() {
+	private Server<T> getServer() {
 		return this;
 	}
 
@@ -94,7 +95,7 @@ public class Server implements Runnable {
 		executorService.execute(this);
 	}
 
-	public ConcurrentHashMap<Long, ServerConnectionHandler> getConnectionMap() {
+	public ConcurrentHashMap<Long, ServerConnectionHandler<T>> getConnectionMap() {
 		return connectionMap;
 	}
 
@@ -125,7 +126,7 @@ public class Server implements Runnable {
 					// Add a basic timeout if the client has not sent or received information in past X seconds.
 					ch.pipeline().addLast(new ReadTimeoutHandler(timeout)).addLast(new WriteTimeoutHandler(timeout));
 
-					ServerConnectionHandler connectionHandler = new ServerConnectionHandler(getServer());
+					ServerConnectionHandler<T> connectionHandler = new ServerConnectionHandler<T>(getServer());
 
 					// Set the classes for the connection handler.
 					connectionHandler.setClazzes(clazzes);
@@ -174,15 +175,15 @@ public class Server implements Runnable {
 		}
 	}
 
-	public void addListener(Listener listener) {
+	public void addListener(Listener<T> listener) {
 		listeners.add(listener);
 	}
 
-	public void removeLitener(Listener listener) {
+	public void removeLitener(Listener<T> listener) {
 		listeners.remove(listener);
 	}
 
-	public ArrayList<Listener> getListeners() {
+	public ArrayList<Listener<T>> getListeners() {
 		return listeners;
 	}
 

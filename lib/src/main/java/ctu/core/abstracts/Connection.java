@@ -27,8 +27,9 @@ import io.netty.channel.socket.DatagramPacket;
  *         The Connection class is an abstract class that provides methods to handle connection data such as
  *         compression, decompression, sending TCP and UDP packets, and converting bytes to packets. The class also
  *         contains a list of acceptable classes that it can check against.
+ * @param <T>
  */
-public abstract class Connection extends SimpleChannelInboundHandler<ByteBuf> {
+public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	// This field is a list of acceptable classes that the Connection class can check against when handling packets.
 	private HashMap<Integer, Class<?>> clazzesIntegerClazz = new HashMap<>();
 	private HashMap<String, Integer> clazzesStringInteger = new HashMap<>();
@@ -36,6 +37,9 @@ public abstract class Connection extends SimpleChannelInboundHandler<ByteBuf> {
 	// This field is an instance of the ChannelHandlerContext class that represents the context of the Netty channel.
 	// It is used to send packets to the remote address.
 	private ChannelHandlerContext ctx;
+
+	private int connectionID = -1;
+	private T connectionObject = null;
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {
@@ -157,8 +161,8 @@ public abstract class Connection extends SimpleChannelInboundHandler<ByteBuf> {
 	 * that represents the index of the associated class in the list of acceptable classes. The method then creates a
 	 * DatagramPacket object and sends it to the remote address using the Netty channel.
 	 * 
-	 * @param packet
-	 * @return 
+	 * @param  packet
+	 * @return
 	 */
 	public int sendUDP(Packet packet) {
 		byte[] header = new byte[3];
@@ -182,7 +186,7 @@ public abstract class Connection extends SimpleChannelInboundHandler<ByteBuf> {
 		} else {
 			ctx.writeAndFlush(datagramPacket);
 		}
-		
+
 		return bytes.length;
 	}
 
@@ -191,8 +195,8 @@ public abstract class Connection extends SimpleChannelInboundHandler<ByteBuf> {
 	 * and the packet data, where the header is the same as in the sendUDP() method. The method then sends the data
 	 * using the Netty channel.
 	 * 
-	 * @param packet
-	 * @return 
+	 * @param  packet
+	 * @return
 	 */
 	public int sendTCP(Packet packet) {
 		byte[] header = new byte[3];
@@ -224,7 +228,7 @@ public abstract class Connection extends SimpleChannelInboundHandler<ByteBuf> {
 				}
 			});
 		}
-		
+
 		return bytes.length;
 	}
 
@@ -243,5 +247,13 @@ public abstract class Connection extends SimpleChannelInboundHandler<ByteBuf> {
 			clazzesIntegerClazz.put(key, value);
 			clazzesStringInteger.put(name, key);
 		});
+	}
+
+	public int getConnectionID() {
+		return connectionID;
+	}
+
+	public Object getConnectionObject() {
+		return connectionObject;
 	}
 }

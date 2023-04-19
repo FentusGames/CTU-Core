@@ -9,22 +9,23 @@ import ctu.core.abstracts.Packet;
  * handling various events related to network connections. This class is meant to be extended by other classes that want
  * to implement their own specific behavior for these events.
  * 
- * @author Fentus
+ * @author     Fentus
+ * @param  <T>
  */
-public abstract class Listener {
+public abstract class Listener<T> {
 	// This method is called when a connection is established and becomes active. It takes a "Connection" object as a
 	// parameter, which represents the connection that became active.
-	public abstract void channelActive(Connection connection);
+	public abstract void channelActive(Connection<T> connection);
 
 	// This method is called when a packet is received on the connection. It takes a "Connection" object and a "Packet"
 	// object as parameters, which represent the connection and the received packet, respectively.
-	public abstract void channelRead(Connection connection, Packet packet);
+	public abstract void channelRead(Connection<T> connection, Packet packet);
 
 	// This method is called when a connection is closed and becomes inactive. It takes a "Connection" object as a
 	// parameter, which represents the connection that became inactive.
-	public abstract void channelInactive(Connection connection);
+	public abstract void channelInactive(Connection<T> connection);
 
 	// This method is called when an exception is thrown during any of the above methods. It takes a "Connection" object
 	// as a parameter, which represents the connection on which the exception occurred.
-	public abstract void channelExceptionCaught(Connection connection);
+	public abstract void channelExceptionCaught(Connection<T> connection);
 }
