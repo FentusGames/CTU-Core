@@ -55,13 +55,5 @@ public class ClientLauncher {
 		});
 
 		client.start();
-		
-		try {
-			Thread.sleep(20000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		
-		client.close();
 	}
 }
