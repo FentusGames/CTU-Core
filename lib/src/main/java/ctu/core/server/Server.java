@@ -9,7 +9,7 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import javax.net.ssl.SSLException;
 
-import ctu.core.listeners.Listener;
+import ctu.core.interfaces.Listener;
 import ctu.core.logger.Log;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;

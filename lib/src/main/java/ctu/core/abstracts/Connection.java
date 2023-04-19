@@ -22,12 +22,12 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramPacket;
 
 /**
- * @author Fentus
+ * @author     Fentus
  * 
- *         The Connection class is an abstract class that provides methods to handle connection data such as
- *         compression, decompression, sending TCP and UDP packets, and converting bytes to packets. The class also
- *         contains a list of acceptable classes that it can check against.
- * @param <T>
+ *             The Connection class is an abstract class that provides methods to handle connection data such as
+ *             compression, decompression, sending TCP and UDP packets, and converting bytes to packets. The class also
+ *             contains a list of acceptable classes that it can check against.
+ * @param  <T>
  */
 public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	// This field is a list of acceptable classes that the Connection class can check against when handling packets.
@@ -249,8 +249,16 @@ public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf>
 		});
 	}
 
+	public void setConnectionID(int connectionID) {
+		this.connectionID = connectionID;
+	}
+
 	public int getConnectionID() {
 		return connectionID;
+	}
+
+	public void setConnectionObject(T connectionObject) {
+		this.connectionObject = connectionObject;
 	}
 
 	public Object getConnectionObject() {

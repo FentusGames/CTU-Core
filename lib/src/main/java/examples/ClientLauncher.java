@@ -3,7 +3,7 @@ package examples;
 import ctu.core.abstracts.Connection;
 import ctu.core.abstracts.Packet;
 import ctu.core.client.Client;
-import ctu.core.listeners.Listener;
+import ctu.core.interfaces.Listener;
 import ctu.core.packets.PacketPing;
 
 /**

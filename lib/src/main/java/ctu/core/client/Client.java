@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 
 import ctu.core.abstracts.Packet;
-import ctu.core.listeners.Listener;
+import ctu.core.interfaces.Listener;
 import ctu.core.logger.Log;
 import ctu.core.packets.PacketPing;
 import io.netty.bootstrap.Bootstrap;

@@ -1,4 +1,4 @@
-package ctu.core.listeners;
+package ctu.core.interfaces;
 
 import ctu.core.abstracts.Connection;
 import ctu.core.abstracts.Packet;
