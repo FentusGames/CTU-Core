@@ -39,6 +39,7 @@ public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf>
 	private ChannelHandlerContext ctx;
 
 	private long connectionID = -1;
+	private long userID = -1;
 	private T connectionObject = null;
 
 	@Override
@@ -255,6 +256,14 @@ public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf>
 
 	public long getConnectionID() {
 		return connectionID;
+	}
+
+	public void setUserID(long userID) {
+		this.userID = userID;
+	}
+
+	public long getUserID() {
+		return userID;
 	}
 
 	public void setConnectionObject(T connectionObject) {

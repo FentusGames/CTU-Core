@@ -191,7 +191,7 @@ public class Client<T> implements Runnable {
 		connectionHandler.addListener(listener);
 	}
 
-	public void removeLitener(Listener<T> listener) {
+	public void removeListener(Listener<T> listener) {
 		connectionHandler.removeListener(listener);
 	}
 
