@@ -38,7 +38,7 @@ public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf>
 	// It is used to send packets to the remote address.
 	private ChannelHandlerContext ctx;
 
-	private int connectionID = -1;
+	private long connectionID = -1;
 	private T connectionObject = null;
 
 	@Override
@@ -249,11 +249,11 @@ public abstract class Connection<T> extends SimpleChannelInboundHandler<ByteBuf>
 		});
 	}
 
-	public void setConnectionID(int connectionID) {
+	public void setConnectionID(long connectionID) {
 		this.connectionID = connectionID;
 	}
 
-	public int getConnectionID() {
+	public long getConnectionID() {
 		return connectionID;
 	}
 
