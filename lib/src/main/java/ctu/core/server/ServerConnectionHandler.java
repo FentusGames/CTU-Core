@@ -31,6 +31,8 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 		long id = server.getNextConnectionId();
 
+		this.setConnectionID(id);
+
 		server.getConnectionMap().put(id, this);
 
 		server.getListeners().forEach(listener -> listener.channelActive(this));
