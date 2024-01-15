@@ -6,11 +6,19 @@
 	<name>CTU Core</name>
 	<description>CTU-Core is a Netty-based Java client-server application that facilitates communication between clients and servers with advanced encryption methods such as SSL, TLS, compression, and other features.</description>
 	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
 		<lwjgl.version>3.2.2</lwjgl.version>
 		<junit.version>5.4.2</junit.version>
 	</properties>
+	<distributionManagement>
+		<repository>
+			<id>github</id>
+			<name>GitHub Packages</name>
+			<url>https://maven.pkg.github.com/FentusGames/CTU-Core</url>
+		</repository>
+	</distributionManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
