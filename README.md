@@ -10,14 +10,7 @@ To get started with CTU-Core, please follow these steps:
 2. Open the project in your preferred Java IDE.<br/>
 3. Use your IDE's build tools to build the project.<br/>
 
-If you prefer, you may use Maven in your project by including the following code:
-```groovy
-<dependency>
-  <groupId>com.fentusgames</groupId>
-  <artifactId>ctu-core</artifactId>
-  <version>3.0.0</version>
-</dependency> 
-```
+If you prefer, you may use Maven in your project by including the following [packages](https://github.com/FentusGames/CTU-Core/packages/).
 
 ## Usage
 
