@@ -1,4 +1,0 @@
-	// This fixes the unused warning in eclipse.
-	public void fix() throws ObjectStreamException {
-		readObjectNoData();
-	}

@@ -1,5 +1,0 @@
-package packets
-
-type PacketPing struct {
-	time timestamp
-}
