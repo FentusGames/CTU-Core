@@ -15,7 +15,7 @@ If you prefer, you may use Maven in your project by including the following code
 <dependency>
   <groupId>com.fentusgames</groupId>
   <artifactId>ctu-core</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>3.0.0</version>
 </dependency> 
 ```
 
