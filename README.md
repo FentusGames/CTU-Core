@@ -10,22 +10,18 @@ To get started with CTU-Core, please follow these steps:
 2. Open the project in your preferred Java IDE.<br/>
 3. Use your IDE's build tools to build the project.<br/>
 
-If you prefer, you may use Gradle in your project by including the following code:
-
-## Client & Server
+If you prefer, you may use Maven in your project by including the following code:
 ```groovy
-repositories {
-      maven { url 'https://jitpack.io' }
-}
-
-dependencies {
-      implementation 'com.github.FentusGames:CTU-Core:2.0.0'
-}
+<dependency>
+  <groupId>com.fentusgames</groupId>
+  <artifactId>ctu-core</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+</dependency> 
 ```
 
 ## Usage
 
-Check [Example Server](https://github.com/FentusGames/CTU-Core/blob/master/lib/src/main/java/examples/ServerLauncher.java) / [Example Client](https://github.com/FentusGames/CTU-Core/blob/master/lib/src/main/java/examples/ClientLauncher.java) for details on how to configure the client and/or server.
+Check [Example Server](https://github.com/FentusGames/CTU-Core/blob/master/src/main/java/examples/ServerLauncher.java) / [Example Client](https://github.com/FentusGames/CTU-Core/blob/master/src/main/java/examples/ClientLauncher.java) for details on how to configure the client and/or server.
 
 ## SSL & TLS (server.key & server.crt)
 
