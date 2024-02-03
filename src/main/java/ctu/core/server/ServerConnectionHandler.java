@@ -44,7 +44,12 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
 		long id = getConnectionId(ctx.channel());
 
-		server.getConnectionMap().values().removeIf(channel -> channel == ctx.channel());
+		boolean removed = server.getConnectionMap().values().removeIf(channel -> channel == ctx.channel());
+
+		if (removed) {
+			ctx.close(); // Ensure the channel is closed
+			Log.debug("Connection closed and removed with id: " + id);
+		}
 
 		server.getListeners().forEach(listener -> listener.channelInactive(this));
 

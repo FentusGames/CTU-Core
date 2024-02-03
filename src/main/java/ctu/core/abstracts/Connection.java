@@ -160,6 +160,36 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			return baos.toByteArray();
 		}
 	};
+	
+	/**
+	 * packetToBytes takes a Compression object as an argument and returns a compressed version of the marshalled packet 
+	 * data. The method compresses the packet data using the compress method of the Compression object, and then checks
+	 * whether the compressed data exceeds the MTU size limit of 1500 bytes. If the compressed data is larger than the
+	 * MTU size, the method prints a warning message to the console.
+	 *
+	 * Note that the default buffer size for the byte array used in the getData method is 4096 bytes. Subclasses may
+	 * override this value if necessary.
+	 * 
+	 * @param  compression
+	 * @return
+	 */
+	public byte[] packetToBytes(Compression compression, Packet packet) {
+		byte[] buf = new byte[4096];
+
+		byte[] out = null;
+
+		try {
+			out = compression.compress(Arrays.copyOf(buf, packet.marshal(buf, 0)));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		if (out.length >= 1500) {
+			Log.debug("Packets should not exceed 1500 bytes after compression.");
+		}
+
+		return out;
+	}
 
 	/**
 	 * This method sends a UDP packet containing the given Packet object. It first creates a byte array that contains a
@@ -177,7 +207,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 
 		System.arraycopy(new byte[] { (byte) key }, 0, header, 2, 1);
 
-		byte[] data = packet.getData(compression);
+		byte[] data = packetToBytes(compression, packet);
 
 		System.arraycopy(new byte[] { (byte) (data.length >>> 8), (byte) data.length }, 0, header, 0, 2);
 
@@ -211,7 +241,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 
 		System.arraycopy(new byte[] { (byte) key }, 0, header, 2, 1);
 
-		byte[] data = packet.getData(compression);
+		byte[] data = packetToBytes(compression, packet);
 
 		System.arraycopy(new byte[] { (byte) (data.length >>> 8), (byte) data.length }, 0, header, 0, 2);
 

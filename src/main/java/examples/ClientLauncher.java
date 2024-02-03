@@ -23,7 +23,7 @@ public class ClientLauncher {
 
 	public static void main(String[] args) {
 		// Creating a new client that connects to the server at an address and port 9091.
-		Client<CustomConnection> client = new Client<CustomConnection>("10.89.0.6", 9091, 10);
+		Client<CustomConnection> client = new Client<CustomConnection>("localhost", 9091, 10);
 
 		// Registering the "PacketPing" class allows the client to send and receive this packet.
 		client.register(PacketPing.class);
