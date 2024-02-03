@@ -18,6 +18,10 @@ Check [Example Server](https://github.com/FentusGames/CTU-Core/blob/master/src/m
 
 ## SSL & TLS (server.key & server.crt)
 
+You can now generate your SSL & TLS vis this file [GenerateSSLCerts](https://github.com/FentusGames/CTU-Core/blob/master/src/main/java/examples/keys/GenerateSSLCerts.java)
+
+OR
+
 1. Install [OpenSSL](https://www.openssl.org/source/) on your machine if you don't already have it. You can download OpenSSL from the official website or use your system's package manager.
 2. Open a command prompt or terminal window.
 3. Navigate to the directory where you want to generate the certificate and key files.
