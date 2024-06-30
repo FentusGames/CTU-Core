@@ -32,13 +32,15 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 
 /**
- * @author     Fentus
+ * @author Fentus
  * 
- *             The Client class represents a client that connects to a server via SSL/TLS for secure communication. It
- *             initializes an SSL context with the specified SSL provider, protocols, and trust manager during
- *             construction. The start() method starts the client with the specified SSL context and ensures that
- *             SSL/TLS is being used and that the connection was successful.
- * @param  <T>
+ *         The Client class represents a client that connects to a server via
+ *         SSL/TLS for secure communication. It initializes an SSL context with
+ *         the specified SSL provider, protocols, and trust manager during
+ *         construction. The start() method starts the client with the specified
+ *         SSL context and ensures that SSL/TLS is being used and that the
+ *         connection was successful.
+ * @param <T>
  */
 public class Client<T> implements Runnable {
 	// Creating a thread pool with a cached pool of threads.
@@ -58,8 +60,9 @@ public class Client<T> implements Runnable {
 	private ChannelFuture future;
 
 	/**
-	 * Constructs a new Client object with the given host and port. It also initializes the SSL context with the
-	 * specified SSL provider, protocols, and trust manager for secure communication.
+	 * Constructs a new Client object with the given host and port. It also
+	 * initializes the SSL context with the specified SSL provider, protocols, and
+	 * trust manager for secure communication.
 	 *
 	 * @param host The hostname to connect to.
 	 * @param port The port number to connect to.
@@ -84,8 +87,8 @@ public class Client<T> implements Runnable {
 	}
 
 	/**
-	 * Starts the client with the specified SSL context and ensures that SSL/TLS is being used and that the connection
-	 * was successful.
+	 * Starts the client with the specified SSL context and ensures that SSL/TLS is
+	 * being used and that the connection was successful.
 	 */
 	public void start() {
 		executorService.execute(this);
@@ -129,7 +132,8 @@ public class Client<T> implements Runnable {
 					// Add the SSL handler to the pipeline.
 					pipeline.addLast(sslCtx.newHandler(ch.alloc(), host, port));
 
-					// Add a basic timeout if the client has not sent or received information in past X seconds.
+					// Add a basic timeout if the client has not sent or received information in
+					// past X seconds.
 					ch.pipeline().addLast(new ReadTimeoutHandler(timeout)).addLast(new WriteTimeoutHandler(timeout));
 
 					// Set the classes for the connection handler.
@@ -212,7 +216,9 @@ public class Client<T> implements Runnable {
 		}
 
 		try {
-			future.channel().close().sync();
+			if (future != null) {
+				future.channel().close().sync();
+			}
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
