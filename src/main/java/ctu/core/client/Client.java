@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 
 import ctu.core.abstracts.Packet;
+import ctu.core.callbacks.CallbackConnect;
 import ctu.core.interfaces.Listener;
 import ctu.core.logger.Log;
 import ctu.core.packets.PacketPing;
@@ -59,6 +60,8 @@ public class Client<T> implements Runnable {
 
 	private ChannelFuture future;
 
+	private CallbackConnect callbackConnect;
+
 	/**
 	 * Constructs a new Client object with the given host and port. It also
 	 * initializes the SSL context with the specified SSL provider, protocols, and
@@ -85,12 +88,18 @@ public class Client<T> implements Runnable {
 			e.printStackTrace();
 		}
 	}
+	
+	public void start() {
+		start(null);
+	}
 
 	/**
 	 * Starts the client with the specified SSL context and ensures that SSL/TLS is
 	 * being used and that the connection was successful.
 	 */
-	public void start() {
+	public void start(CallbackConnect callbackConnect) {
+		this.callbackConnect = callbackConnect;
+		
 		executorService.execute(this);
 		executorService.scheduleAtFixedRate(new Runnable() {
 			@Override
@@ -173,6 +182,10 @@ public class Client<T> implements Runnable {
 
 						// Exit the program if the connection failed.
 						System.exit(0);
+					}
+					
+					if (callbackConnect != null) {
+						callbackConnect.execute(future.isSuccess());
 					}
 				}
 			});
