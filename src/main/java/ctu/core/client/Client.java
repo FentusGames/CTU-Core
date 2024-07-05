@@ -33,15 +33,10 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 
 /**
- * @author Fentus
+ * @author     Fentus
  * 
- *         The Client class represents a client that connects to a server via
- *         SSL/TLS for secure communication. It initializes an SSL context with
- *         the specified SSL provider, protocols, and trust manager during
- *         construction. The start() method starts the client with the specified
- *         SSL context and ensures that SSL/TLS is being used and that the
- *         connection was successful.
- * @param <T>
+ *             The Client class represents a client that connects to a server via SSL/TLS for secure communication. It initializes an SSL context with the specified SSL provider, protocols, and trust manager during construction. The start() method starts the client with the specified SSL context and ensures that SSL/TLS is being used and that the connection was successful.
+ * @param  <T>
  */
 public class Client<T> implements Runnable {
 	// Creating a thread pool with a cached pool of threads.
@@ -62,10 +57,10 @@ public class Client<T> implements Runnable {
 
 	private CallbackConnect callbackConnect;
 
+	protected boolean connected = false;
+
 	/**
-	 * Constructs a new Client object with the given host and port. It also
-	 * initializes the SSL context with the specified SSL provider, protocols, and
-	 * trust manager for secure communication.
+	 * Constructs a new Client object with the given host and port. It also initializes the SSL context with the specified SSL provider, protocols, and trust manager for secure communication.
 	 *
 	 * @param host The hostname to connect to.
 	 * @param port The port number to connect to.
@@ -88,18 +83,17 @@ public class Client<T> implements Runnable {
 			e.printStackTrace();
 		}
 	}
-	
+
 	public void start() {
 		start(null);
 	}
 
 	/**
-	 * Starts the client with the specified SSL context and ensures that SSL/TLS is
-	 * being used and that the connection was successful.
+	 * Starts the client with the specified SSL context and ensures that SSL/TLS is being used and that the connection was successful.
 	 */
 	public void start(CallbackConnect callbackConnect) {
 		this.callbackConnect = callbackConnect;
-		
+
 		executorService.execute(this);
 		executorService.scheduleAtFixedRate(new Runnable() {
 			@Override
@@ -165,6 +159,14 @@ public class Client<T> implements Runnable {
 							}
 						}
 					});
+
+					pipeline.addLast(new ChannelInboundHandlerAdapter() {
+						@Override
+						public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+							connected = false;
+							super.channelInactive(ctx);
+						}
+					});
 				}
 			});
 
@@ -175,7 +177,9 @@ public class Client<T> implements Runnable {
 			future.addListener(new FutureListener<Void>() {
 				@Override
 				public void operationComplete(Future<Void> future) throws Exception {
-					if (future.isSuccess()) {
+					connected = future.isSuccess();
+
+					if (connected) {
 						Log.debug("Connection success");
 					} else {
 						Log.debug("Connection failed");
@@ -183,9 +187,9 @@ public class Client<T> implements Runnable {
 						// Exit the program if the connection failed.
 						System.exit(0);
 					}
-					
+
 					if (callbackConnect != null) {
-						callbackConnect.execute(future.isSuccess());
+						callbackConnect.execute(connected);
 					}
 				}
 			});
@@ -193,7 +197,6 @@ public class Client<T> implements Runnable {
 			try {
 				future.channel().closeFuture().sync();
 			} catch (InterruptedException e) {
-
 			}
 		} finally {
 			group.shutdownGracefully();
@@ -217,6 +220,8 @@ public class Client<T> implements Runnable {
 	}
 
 	public void close() {
+		connected = false;
+
 		executorService.shutdown(); // initiate shutdown
 
 		try {
@@ -239,5 +244,9 @@ public class Client<T> implements Runnable {
 
 	public ScheduledExecutorService getExecutorService() {
 		return executorService;
+	}
+
+	public boolean isConnected() {
+		return connected && future != null && future.channel().isActive();
 	}
 }
