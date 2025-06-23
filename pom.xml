@@ -2,7 +2,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.fentusgames</groupId>
 	<artifactId>ctu-core</artifactId>
-	<version>3.0.7</version>
+	<version>3.0.8</version>
 	<name>CTU Core</name>
 	<description>CTU-Core is a Netty-based Java client-server application that facilitates communication between clients and servers with advanced encryption methods such as SSL, TLS, compression, and other features.</description>
 	<properties>
