@@ -183,9 +183,6 @@ public class Client<T> implements Runnable {
 						Log.debug("Connection success");
 					} else {
 						Log.debug("Connection failed");
-
-						// Exit the program if the connection failed.
-						System.exit(0);
 					}
 
 					if (callbackConnect != null) {
