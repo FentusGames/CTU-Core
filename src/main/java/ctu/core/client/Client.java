@@ -48,7 +48,7 @@ public class Client<T> implements Runnable {
 	private SslContext sslCtx;
 	private long ping = 0;
 
-	private final ClientConnectionHandler<T> connectionHandler = new ClientConnectionHandler<T>(this);
+	private volatile ClientConnectionHandler<T> connectionHandler;
 	private HashMap<Integer, Class<?>> clazzes = new HashMap<>();
 
 	private Integer key = 0;
@@ -105,7 +105,11 @@ public class Client<T> implements Runnable {
 	}
 
 	public void sendTCP(Packet packet) {
-		connectionHandler.sendTCP(packet);
+		if (connectionHandler != null && isConnected()) {
+			connectionHandler.sendTCP(packet);
+		} else {
+			Log.debug("Cannot send TCP: not connected.");
+		}
 	}
 
 	public void sendUDP(Packet packet) {
@@ -138,6 +142,9 @@ public class Client<T> implements Runnable {
 					// Add a basic timeout if the client has not sent or received information in
 					// past X seconds.
 					ch.pipeline().addLast(new ReadTimeoutHandler(timeout)).addLast(new WriteTimeoutHandler(timeout));
+
+					// Assign new instance
+					connectionHandler = new ClientConnectionHandler<>(Client.this);
 
 					// Set the classes for the connection handler.
 					connectionHandler.setClazzes(clazzes);
