@@ -63,8 +63,6 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 			}
 		}
 
-		byteBuf.release();
-
 		Log.debug("Received message from server. Bytes: " + size);
 	}
 
