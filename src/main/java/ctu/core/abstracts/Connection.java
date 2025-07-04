@@ -285,7 +285,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		});
 	}
 
-	public void setConnectionID(long connectionID) {
+	protected void setConnectionID(long connectionID) {
 		this.connectionID = connectionID;
 	}
 
