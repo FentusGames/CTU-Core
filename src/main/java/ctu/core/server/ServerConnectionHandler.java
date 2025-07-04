@@ -13,9 +13,7 @@ import io.netty.channel.ChannelHandlerContext;
 /**
  * @author     Fentus
  * 
- *             The ServerConnectionHandler class represents a connection handler for a server that communicates with
- *             clients over SSL/TLS for secure communication. It extends the Connection class and implements methods for
- *             handling active and inactive channels, exceptions, and reading from channels.\
+ *             The ServerConnectionHandler class represents a connection handler for a server that communicates with clients over SSL/TLS for secure communication. It extends the Connection class and implements methods for handling active and inactive channels, exceptions, and reading from channels.\
  * @param  <T>
  */
 public class ServerConnectionHandler<T> extends Connection<T> {
@@ -91,14 +89,14 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 		// Convert bytes to packet
 		Packet packet = bytesToPacket(bytes);
 
-		// Send the ping packet right back w/o processing it.
+		// Send the ping packet right back.
 		if (packet instanceof PacketPing) {
 			sendTCP(packet);
-		} else {
-			// Do something with the packet
-			if (packet != null) {
-				server.getListeners().forEach(listener -> listener.channelRead(this, packet));
-			}
+		}
+
+		// Do something with the packet
+		if (packet != null) {
+			server.getListeners().forEach(listener -> listener.channelRead(this, packet));
 		}
 
 		byteBuf.release();
