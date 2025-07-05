@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 
 import javax.net.ssl.SSLException;
 
+import ctu.core.abstracts.Packet;
 import ctu.core.interfaces.Listener;
 import ctu.core.logger.Log;
 import io.netty.bootstrap.ServerBootstrap;
@@ -105,6 +106,18 @@ public class Server<T> implements Runnable {
 
 	public void register(Class<?> clazz) {
 		clazzes.put(key++, clazz);
+	}
+
+	public void broadcastTCP(Packet packet) {
+		connectionMap.forEach((userID, connection) -> {
+			connection.sendTCP(packet);
+		});
+	}
+
+	public void broadcastUDP(Packet packet) {
+		connectionMap.forEach((userID, connection) -> {
+			connection.sendUDP(packet);
+		});
 	}
 
 	@Override
