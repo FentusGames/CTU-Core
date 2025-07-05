@@ -21,9 +21,16 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 	private CopyOnWriteArrayList<Listener<T>> listeners = new CopyOnWriteArrayList<>();
 	private Client<T> client;
 
-	public ClientConnectionHandler(Client<T> client) {
-		this.client = client;
-	}
+    /**
+     * Constructs a new ClientConnectionHandler with a given client, userID, and connectionObject.
+     *
+     * @param client the client managing this handler
+     * @param connectionObject the associated connection object (never null)
+     */
+    public ClientConnectionHandler(Client<T> client, T connectionObject) {
+        super(connectionObject);
+        this.client = client;
+    }
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {

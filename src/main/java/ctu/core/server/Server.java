@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Supplier;
 
 import javax.net.ssl.SSLException;
 
@@ -32,11 +33,7 @@ import io.netty.handler.timeout.WriteTimeoutHandler;
  * 
  * @author     Fentus
  * 
- *             The Server class represents a server that listens for incoming client connections and handles them. It is
- *             constructed with the specified port number, and the SSL context is initialized during construction with
- *             the server's certificate and private key for secure communication. To start the server, call the start()
- *             method, which binds the server to the specified port, starts the event loop groups, and initializes the
- *             handlers for incoming client connections.
+ *             The Server class represents a server that listens for incoming client connections and handles them. It is constructed with the specified port number, and the SSL context is initialized during construction with the server's certificate and private key for secure communication. To start the server, call the start() method, which binds the server to the specified port, starts the event loop groups, and initializes the handlers for incoming client connections.
  * @param  <T>
  */
 public class Server<T> implements Runnable {
@@ -50,6 +47,8 @@ public class Server<T> implements Runnable {
 
 	private final int port;
 	private final int timeout;
+	private final Supplier<T> connectionObjectSupplier;
+
 	private SslContext sslCtx;
 
 	private int connectionId;
@@ -61,14 +60,16 @@ public class Server<T> implements Runnable {
 	private int key = 0;
 
 	/**
-	 * Constructs a new Server object with the given port number. It also initializes the SSL context with the specified
-	 * SSL provider, protocols, and the server's certificate and private key for secure communication.
+	 * Constructs a new Server object with the given port number. It also initializes the SSL context with the specified SSL provider, protocols, and the server's certificate and private key for secure communication.
 	 * 
-	 * @param port The port number for the server to listen on.
+	 * @param port                     the port to bind the server
+	 * @param timeout                  timeout for read/write handlers in seconds
+	 * @param connectionObjectSupplier supplier to create new non-null connection objects for each connection
 	 */
-	public Server(int port, int timeout) {
+	public Server(int port, int timeout, Supplier<T> connectionObjectSupplier) {
 		this.port = port;
 		this.timeout = timeout;
+		this.connectionObjectSupplier = connectionObjectSupplier;
 
 		try {
 			// @formatter:off
@@ -88,8 +89,7 @@ public class Server<T> implements Runnable {
 	}
 
 	/**
-	 * Starts the server with the specified SSL context and ensures that SSL is being used and the connection was
-	 * successful.
+	 * Starts the server with the specified SSL context and ensures that SSL is being used and the connection was successful.
 	 */
 	public void start() {
 		executorService.execute(this);
@@ -126,7 +126,12 @@ public class Server<T> implements Runnable {
 					// Add a basic timeout if the client has not sent or received information in past X seconds.
 					ch.pipeline().addLast(new ReadTimeoutHandler(timeout)).addLast(new WriteTimeoutHandler(timeout));
 
-					ServerConnectionHandler<T> connectionHandler = new ServerConnectionHandler<T>(getServer());
+					T connectionObject = connectionObjectSupplier.get();
+					if (connectionObject == null) {
+						throw new IllegalStateException("Supplier provided null connectionObject.");
+					}
+
+					ServerConnectionHandler<T> connectionHandler = new ServerConnectionHandler<>(getServer(), connectionObject);
 
 					// Set the classes for the connection handler.
 					connectionHandler.setClazzes(clazzes);

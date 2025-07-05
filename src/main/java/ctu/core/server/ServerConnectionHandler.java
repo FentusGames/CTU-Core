@@ -19,9 +19,17 @@ import io.netty.channel.ChannelHandlerContext;
 public class ServerConnectionHandler<T> extends Connection<T> {
 	private Server<T> server;
 
-	public ServerConnectionHandler(Server<T> server) {
-		this.server = server;
-	}
+    /**
+     * Constructs a new ServerConnectionHandler with a given server, userID, and connectionObject.
+     *
+     * @param server the server managing this handler
+     * @param userID the user ID (must be positive and non-zero)
+     * @param connectionObject the associated connection object (never null)
+     */
+    public ServerConnectionHandler(Server<T> server, T connectionObject) {
+        super(connectionObject);
+        this.server = server;
+    }
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {

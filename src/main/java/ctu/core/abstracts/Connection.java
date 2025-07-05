@@ -8,6 +8,7 @@ import java.nio.BufferUnderflowException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.InputMismatchException;
+import java.util.Objects;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
@@ -24,15 +25,13 @@ import io.netty.channel.socket.DatagramPacket;
 /**
  * @author     Fentus
  * 
- *             The Connection class is an abstract class that provides methods to handle connection data such as
- *             compression, decompression, sending TCP and UDP packets, and converting bytes to packets. The class also
- *             contains a list of acceptable classes that it can check against.
+ *             The Connection class is an abstract class that provides methods to handle connection data such as compression, decompression, sending TCP and UDP packets, and converting bytes to packets. The class also contains a list of acceptable classes that it can check against.
  * @param  <T>
  */
 public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	private long connectionID = -1;
 	private long userID = -1;
-	private T connectionObject = null;
+	private final T connectionObject;
 
 	// This field is a list of acceptable classes that the Connection class can check against when handling packets.
 	private HashMap<Integer, Class<?>> clazzesIntegerClazz = new HashMap<>();
@@ -41,6 +40,15 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	// This field is an instance of the ChannelHandlerContext class that represents the context of the Netty channel.
 	// It is used to send packets to the remote address.
 	private ChannelHandlerContext ctx;
+
+	/**
+	 * Constructs a new Connection with the given non-null connection object.
+	 * 
+	 * @param connectionObject the connection object associated with this connection
+	 */
+	public Connection(T connectionObject) {
+		this.connectionObject = Objects.requireNonNull(connectionObject, "connectionObject must not be null");
+	}
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {
@@ -53,11 +61,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	}
 
 	/**
-	 * This method takes an array of bytes and converts it into a Packet object. It returns null if the bytes array is
-	 * null or has a length of 0. Otherwise, it extracts the index and the associated class from the list of acceptable
-	 * classes based on the index. Then, it instantiates the class and uses its unmarshal() method to deserialize the
-	 * packet data. The deserialization is performed by first decompressing the byte array and then calling the
-	 * unmarshal() method.
+	 * This method takes an array of bytes and converts it into a Packet object. It returns null if the bytes array is null or has a length of 0. Otherwise, it extracts the index and the associated class from the list of acceptable classes based on the index. Then, it instantiates the class and uses its unmarshal() method to deserialize the packet data. The deserialization is performed by first decompressing the byte array and then calling the unmarshal() method.
 	 * 
 	 * @param  bytes
 	 * @return
@@ -96,8 +100,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	}
 
 	/**
-	 * This field is an instance of the Compression interface that provides methods for compressing and decompressing
-	 * data. It is used to compress and decompress packet data before and after transmission.
+	 * This field is an instance of the Compression interface that provides methods for compressing and decompressing data. It is used to compress and decompress packet data before and after transmission.
 	 */
 	private Compression compression = new Compression() {
 		@Override
@@ -119,7 +122,6 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 					baos.write(tmp, 0, size);
 				}
 			} catch (Exception ex) {
-
 			} finally {
 				try {
 					if (baos != null)
@@ -148,7 +150,6 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 					baos.write(tmp, 0, size);
 				}
 			} catch (Exception ex) {
-
 			} finally {
 				try {
 					if (baos != null)
@@ -160,15 +161,11 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			return baos.toByteArray();
 		}
 	};
-	
+
 	/**
-	 * packetToBytes takes a Compression object as an argument and returns a compressed version of the marshalled packet 
-	 * data. The method compresses the packet data using the compress method of the Compression object, and then checks
-	 * whether the compressed data exceeds the MTU size limit of 1500 bytes. If the compressed data is larger than the
-	 * MTU size, the method prints a warning message to the console.
+	 * packetToBytes takes a Compression object as an argument and returns a compressed version of the marshalled packet data. The method compresses the packet data using the compress method of the Compression object, and then checks whether the compressed data exceeds the MTU size limit of 1500 bytes. If the compressed data is larger than the MTU size, the method prints a warning message to the console.
 	 *
-	 * Note that the default buffer size for the byte array used in the getData method is 4096 bytes. Subclasses may
-	 * override this value if necessary.
+	 * Note that the default buffer size for the byte array used in the getData method is 4096 bytes. Subclasses may override this value if necessary.
 	 * 
 	 * @param  compression
 	 * @return
@@ -192,10 +189,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	}
 
 	/**
-	 * This method sends a UDP packet containing the given Packet object. It first creates a byte array that contains a
-	 * header and the packet data. The header consists of two bytes that specify the length of the data and one byte
-	 * that represents the index of the associated class in the list of acceptable classes. The method then creates a
-	 * DatagramPacket object and sends it to the remote address using the Netty channel.
+	 * This method sends a UDP packet containing the given Packet object. It first creates a byte array that contains a header and the packet data. The header consists of two bytes that specify the length of the data and one byte that represents the index of the associated class in the list of acceptable classes. The method then creates a DatagramPacket object and sends it to the remote address using the Netty channel.
 	 * 
 	 * @param  packet
 	 * @return
@@ -227,9 +221,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	}
 
 	/**
-	 * This method sends a TCP packet containing the given Packet object. It creates a byte array that contains a header
-	 * and the packet data, where the header is the same as in the sendUDP() method. The method then sends the data
-	 * using the Netty channel.
+	 * This method sends a TCP packet containing the given Packet object. It creates a byte array that contains a header and the packet data, where the header is the same as in the sendUDP() method. The method then sends the data using the Netty channel.
 	 * 
 	 * @param  packet
 	 * @return
@@ -269,8 +261,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	}
 
 	/**
-	 * This method is used to set the list of acceptable classes that the Connection class can check against. It takes
-	 * an ArrayList of Class<?> as a parameter and assigns it to the "clazzes" member variable of the Connection class.
+	 * This method is used to set the list of acceptable classes that the Connection class can check against. It takes an ArrayList of Class<?> as a parameter and assigns it to the "clazzes" member variable of the Connection class.
 	 * 
 	 * @param clazzes
 	 */
@@ -293,16 +284,12 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		return connectionID;
 	}
 
-	public void setUserID(long userID) {
-		this.userID = userID;
-	}
-
 	public long getUserID() {
 		return userID;
 	}
-
-	public void setConnectionObject(T connectionObject) {
-		this.connectionObject = connectionObject;
+	
+	public void setUserID(long userID) {
+		this.userID = userID;
 	}
 
 	public T getConnectionObject() {

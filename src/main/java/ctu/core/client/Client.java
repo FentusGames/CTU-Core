@@ -45,6 +45,8 @@ public class Client<T> implements Runnable {
 	private final String host;
 	private final int port;
 	private int timeout;
+    private final T connectionObject;
+    
 	private SslContext sslCtx;
 	private long ping = 0;
 
@@ -65,10 +67,11 @@ public class Client<T> implements Runnable {
 	 * @param host The hostname to connect to.
 	 * @param port The port number to connect to.
 	 */
-	public Client(String host, int port, int timeout) {
+	public Client(String host, int port, int timeout, T connectionObject) {
 		this.host = host;
 		this.port = port;
 		this.timeout = timeout;
+        this.connectionObject = connectionObject;
 
 		try {
 			// @formatter:off
@@ -144,7 +147,7 @@ public class Client<T> implements Runnable {
 					ch.pipeline().addLast(new ReadTimeoutHandler(timeout)).addLast(new WriteTimeoutHandler(timeout));
 
 					// Assign new instance
-					connectionHandler = new ClientConnectionHandler<>(Client.this);
+					connectionHandler = new ClientConnectionHandler<>(Client.this, connectionObject);
 
 					// Set the classes for the connection handler.
 					connectionHandler.setClazzes(clazzes);

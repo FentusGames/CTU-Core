@@ -17,13 +17,13 @@ import ctu.core.server.Server;
  */
 public class ServerLauncher {
 	// Used for storing and retrieving custom data in the connection object.
-	public class CustomConnection {
+	public static class CustomConnection {
 
 	}
 
 	public static void main(String[] args) {
 		// Creating a new server that listens on port number 9091 for incoming connections from clients.
-		Server<CustomConnection> server = new Server<CustomConnection>(9091, 10);
+		Server<CustomConnection> server = new Server<CustomConnection>(9091, 10, CustomConnection::new);
 
 		// Registering the "PacketPing" class allows the server to send and receive this packet.
 		server.register(PacketPing.class);
