@@ -99,8 +99,6 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 			server.getListeners().forEach(listener -> listener.channelRead(this, packet));
 		}
 
-		byteBuf.release();
-
 		Log.debug("Received message from client. Bytes: " + size);
 	}
 }
