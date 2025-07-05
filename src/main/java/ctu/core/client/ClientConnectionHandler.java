@@ -2,7 +2,7 @@ package ctu.core.client;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import ctu.core.abstracts.Connection;
 import ctu.core.abstracts.Packet;
@@ -18,7 +18,7 @@ import io.netty.channel.ChannelHandlerContext;
  *         The ClientConnectionHandler class represents a handler for a client connection to a server via SSL/TLS for secure communication. It extends the abstract class Connection and overrides methods for handling channel events like channelActive, channelInactive, channelRead0 and exceptionCaught. It also provides methods to add or remove a Listener. When a client is connected to the server, the channelActive method is called and notifies all registered listeners of the channel activation. When the server closes the connection, the channelInactive method is called and notifies all registered listeners of the channel deactivation. The channelRead0 method reads and processes the received bytes, converts them to a Packet and sends the packet to all registered listeners. The exceptionCaught method handles exceptions caused by the channel and notifies all registered listeners of the exception.
  */
 public class ClientConnectionHandler<T> extends Connection<T> {
-	private ArrayList<Listener<T>> listeners = new ArrayList<>();
+	private CopyOnWriteArrayList<Listener<T>> listeners = new CopyOnWriteArrayList<>();
 	private Client<T> client;
 
 	public ClientConnectionHandler(Client<T> client) {
@@ -70,7 +70,10 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
 		listeners.forEach(listener -> listener.channelExceptionCaught(this));
 
-		Log.debug("Connection closed by server: " + cause.getMessage());
+		Log.debug("Connection closed by server: " + cause);
+		cause.printStackTrace();
+
+		ctx.close();
 	}
 
 	public void addListener(Listener<T> listener) {
