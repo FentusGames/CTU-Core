@@ -20,6 +20,8 @@ import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
+import ctu.core.logger.Log;
+
 public class GenerateSSLCerts {
 	public static void main(String[] args) throws Exception {
 		// Adds the BouncyCastle provider to the list of security providers
@@ -60,11 +62,11 @@ public class GenerateSSLCerts {
 		saveCertificate(certificate, "server.crt");
 
 		// Output the generation details
-		System.out.println("Certificate and private key generated successfully with the following settings:");
-		System.out.println("Owner (CN): " + owner);
-		System.out.println("Validity: " + validityDays + " days");
-		System.out.println("RSA Key Size: " + keySize + " bits");
-		System.out.println("Files saved: server.key (Private Key), server.crt (Certificate)");
+		Log.debug("Certificate and private key generated successfully with the following settings:");
+		Log.debug("Owner (CN): " + owner);
+		Log.debug("Validity: " + validityDays + " days");
+		Log.debug("RSA Key Size: " + keySize + " bits");
+		Log.debug("Files saved: server.key (Private Key), server.crt (Certificate)");
 	}
 
 	// Generates RSA key pair with specified key size

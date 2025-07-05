@@ -114,12 +114,6 @@ public class Server<T> implements Runnable {
 		});
 	}
 
-	public void broadcastUDP(Packet packet) {
-		connectionMap.forEach((userID, connection) -> {
-			connection.sendUDP(packet);
-		});
-	}
-
 	@Override
 	public void run() {
 		try {

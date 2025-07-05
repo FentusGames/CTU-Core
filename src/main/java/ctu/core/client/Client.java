@@ -45,8 +45,8 @@ public class Client<T> implements Runnable {
 	private final String host;
 	private final int port;
 	private int timeout;
-    private final T connectionObject;
-    
+	private final T connectionObject;
+
 	private SslContext sslCtx;
 	private long ping = 0;
 
@@ -71,7 +71,7 @@ public class Client<T> implements Runnable {
 		this.host = host;
 		this.port = port;
 		this.timeout = timeout;
-        this.connectionObject = connectionObject;
+		this.connectionObject = connectionObject;
 
 		try {
 			// @formatter:off
@@ -113,10 +113,6 @@ public class Client<T> implements Runnable {
 		} else {
 			Log.debug("Cannot send TCP: not connected.");
 		}
-	}
-
-	public void sendUDP(Packet packet) {
-		connectionHandler.sendUDP(packet);
 	}
 
 	public void register(Class<?> clazz) {

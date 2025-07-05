@@ -3,7 +3,6 @@ package ctu.core.abstracts;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.net.InetSocketAddress;
 import java.nio.BufferUnderflowException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -20,7 +19,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.socket.DatagramPacket;
 
 /**
  * @author     Fentus
@@ -189,38 +187,6 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	}
 
 	/**
-	 * This method sends a UDP packet containing the given Packet object. It first creates a byte array that contains a header and the packet data. The header consists of two bytes that specify the length of the data and one byte that represents the index of the associated class in the list of acceptable classes. The method then creates a DatagramPacket object and sends it to the remote address using the Netty channel.
-	 * 
-	 * @param  packet
-	 * @return
-	 */
-	public int sendUDP(Packet packet) {
-		byte[] header = new byte[3];
-
-		int key = clazzesStringInteger.get(packet.getClass().getSimpleName());
-
-		System.arraycopy(new byte[] { (byte) key }, 0, header, 2, 1);
-
-		byte[] data = packetToBytes(compression, packet);
-
-		System.arraycopy(new byte[] { (byte) (data.length >>> 8), (byte) data.length }, 0, header, 0, 2);
-
-		byte[] bytes = new byte[header.length + data.length];
-
-		System.arraycopy(header, 0, bytes, 0, header.length);
-		System.arraycopy(data, 0, bytes, header.length, data.length);
-
-		DatagramPacket datagramPacket = new DatagramPacket(Unpooled.copiedBuffer(bytes), (InetSocketAddress) ctx.channel().remoteAddress());
-		if (ctx == null) {
-			Log.debug("Failed to send TCP packet: Not connected yet.");
-		} else {
-			ctx.writeAndFlush(datagramPacket);
-		}
-
-		return bytes.length;
-	}
-
-	/**
 	 * This method sends a TCP packet containing the given Packet object. It creates a byte array that contains a header and the packet data, where the header is the same as in the sendUDP() method. The method then sends the data using the Netty channel.
 	 * 
 	 * @param  packet
@@ -287,7 +253,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	public long getUserID() {
 		return userID;
 	}
-	
+
 	public void setUserID(long userID) {
 		this.userID = userID;
 	}
