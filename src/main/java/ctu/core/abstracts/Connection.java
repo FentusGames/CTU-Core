@@ -208,8 +208,11 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		System.arraycopy(header, 0, bytes, 0, header.length);
 		System.arraycopy(data, 0, bytes, header.length, data.length);
 
+		String packetName = packet.getClass().getSimpleName();
+		int size = bytes.length;
+
 		if (ctx == null) {
-			Log.debug("Failed to send TCP packet: Not connected yet.");
+			Log.debug("TCP send failed (not connected) - Packet: " + packetName + ", Size: " + size + " bytes.");
 		} else {
 			ChannelFuture future = ctx.writeAndFlush(Unpooled.copiedBuffer(bytes));
 
@@ -217,11 +220,13 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 				@Override
 				public void operationComplete(ChannelFuture future) {
 					if (!future.isSuccess()) {
-						Log.debug("Failed to send TCP packet: " + future.cause().getMessage());
+						Log.debug("TCP send failed: " + future.cause().getMessage() + " - Packet: " + packetName + ", Size: " + size + " bytes.");
 					}
 				}
 			});
 		}
+
+		Log.debug("Sent TCP packet: " + packetName + ", Size: " + size + " bytes.");
 
 		return bytes.length;
 	}
