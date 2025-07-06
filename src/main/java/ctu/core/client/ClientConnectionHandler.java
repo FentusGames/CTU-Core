@@ -63,14 +63,13 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 			PacketPing packetPing = (PacketPing) packet;
 
 			client.setPing(Duration.between(packetPing.time, Instant.now()).toNanos());
-		} else {
-			// Do something with the packet
-			if (packet != null) {
-				listeners.forEach(listener -> listener.channelRead(this, packet));
-			}
 		}
-
-		Log.debug("Received message from server. Bytes: " + size);
+		
+		if (packet != null) {
+			listeners.forEach(listener -> listener.channelRead(this, packet));
+		}
+			
+		Log.debug("Received TCP packet: " + packet.getClass().getName() + ", Size: " + size + " bytes. ");
 	}
 
 	@Override

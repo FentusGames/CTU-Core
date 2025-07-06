@@ -1,13 +1,10 @@
 package ctu.core.server;
 
-import java.util.Map;
-
 import ctu.core.abstracts.Connection;
 import ctu.core.abstracts.Packet;
 import ctu.core.logger.Log;
 import ctu.core.packets.PacketPing;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 
 /**
@@ -19,17 +16,17 @@ import io.netty.channel.ChannelHandlerContext;
 public class ServerConnectionHandler<T> extends Connection<T> {
 	private Server<T> server;
 
-    /**
-     * Constructs a new ServerConnectionHandler with a given server, userID, and connectionObject.
-     *
-     * @param server the server managing this handler
-     * @param userID the user ID (must be positive and non-zero)
-     * @param connectionObject the associated connection object (never null)
-     */
-    public ServerConnectionHandler(Server<T> server, T connectionObject) {
-        super(connectionObject);
-        this.server = server;
-    }
+	/**
+	 * Constructs a new ServerConnectionHandler with a given server, userID, and connectionObject.
+	 *
+	 * @param server           the server managing this handler
+	 * @param userID           the user ID (must be positive and non-zero)
+	 * @param connectionObject the associated connection object (never null)
+	 */
+	public ServerConnectionHandler(Server<T> server, T connectionObject) {
+		super(connectionObject);
+		this.server = server;
+	}
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {
@@ -40,7 +37,6 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 		this.setConnectionID(id);
 
 		server.getConnectionMap().put(id, this);
-
 		server.getListeners().forEach(listener -> listener.channelActive(this));
 
 		Log.debug("New connection established with id: " + id);
@@ -48,47 +44,30 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 	@Override
 	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-		long id = getConnectionId(ctx.channel());
+		super.channelInactive(ctx);
 
-		boolean removed = server.getConnectionMap().values().removeIf(channel -> channel == ctx.channel());
+		boolean removed = server.getConnectionMap().values().removeIf(channel -> channel.getCtx().equals(ctx));
 
 		if (removed) {
-			ctx.close(); // Ensure the channel is closed
-			Log.debug("Connection closed and removed with id: " + id);
+			ctx.close();
 		}
 
 		server.getListeners().forEach(listener -> listener.channelInactive(this));
 
-		if (id != -1) {
-			Log.debug("Connection closed with id: " + id);
-		}
 	}
 
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-		long id = getConnectionId(ctx.channel());
+		super.exceptionCaught(ctx, cause);
 
-		server.getConnectionMap().values().removeIf(channel -> channel == ctx.channel());
-
+		server.getConnectionMap().values().removeIf(channel -> channel.getCtx().equals(ctx));
 		server.getListeners().forEach(listener -> listener.channelExceptionCaught(this));
-
-		if (id != -1) {
-			Log.debug("Connection closed with id: " + id);
-		}
-	}
-
-	private synchronized long getConnectionId(Channel channel) {
-		for (Map.Entry<Long, ServerConnectionHandler<T>> entry : server.getConnectionMap().entrySet()) {
-			if (entry.getValue() == channel) {
-				return entry.getKey();
-			}
-		}
-
-		return -1;
 	}
 
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) throws Exception {
+		super.channelRead0(ctx, byteBuf);
+
 		int size = byteBuf.readableBytes();
 
 		byte[] bytes = new byte[size];
@@ -107,6 +86,6 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 			server.getListeners().forEach(listener -> listener.channelRead(this, packet));
 		}
 
-		Log.debug("Received message from client. Bytes: " + size);
+		Log.debug("Received TCP packet: " + packet.getClass().getName() + ", Size: " + size + " bytes. ");
 	}
 }

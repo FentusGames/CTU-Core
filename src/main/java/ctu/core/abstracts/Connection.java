@@ -266,4 +266,8 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	public T getConnectionObject() {
 		return connectionObject;
 	}
+	
+	public ChannelHandlerContext getCtx() {
+		return ctx;
+	}
 }
