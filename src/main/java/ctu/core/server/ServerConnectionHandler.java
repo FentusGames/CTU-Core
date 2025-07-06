@@ -46,7 +46,7 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
 		super.channelInactive(ctx);
 
-		boolean removed = server.getConnectionMap().values().removeIf(channel -> channel.getCtx().equals(ctx));
+		boolean removed = server.getConnectionMap().values().removeIf(connection -> connection.getCtx().equals(ctx));
 
 		if (removed) {
 			ctx.close();
@@ -60,7 +60,7 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
 		super.exceptionCaught(ctx, cause);
 
-		server.getConnectionMap().values().removeIf(channel -> channel.getCtx().equals(ctx));
+		server.getConnectionMap().values().removeIf(connection -> connection.getCtx().equals(ctx));
 		server.getListeners().forEach(listener -> listener.channelExceptionCaught(this));
 	}
 
