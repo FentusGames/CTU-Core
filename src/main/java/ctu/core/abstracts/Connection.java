@@ -14,7 +14,6 @@ import java.util.zip.Inflater;
 import ctu.core.interfaces.Compression;
 import ctu.core.logger.Log;
 import ctu.core.server.Server;
-import examples.ServerLauncher.CustomConnection;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
