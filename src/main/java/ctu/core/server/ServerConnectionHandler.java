@@ -30,6 +30,10 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {
+		if (isInactive()) {
+			return;
+		}
+
 		super.channelActive(ctx);
 
 		long id = server.getNextConnectionId();
@@ -44,13 +48,13 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 	@Override
 	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+		if (isInactive()) {
+			return;
+		}
+
 		super.channelInactive(ctx);
 
-		boolean removed = server.getConnectionMap().values().removeIf(connection -> connection.getCtx().equals(ctx));
-
-		if (removed) {
-			ctx.close();
-		}
+		setInactive(true);
 
 		server.getListeners().forEach(listener -> listener.channelInactive(this));
 
@@ -58,14 +62,23 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+		if (isInactive()) {
+			return;
+		}
+
 		super.exceptionCaught(ctx, cause);
 
-		server.getConnectionMap().values().removeIf(connection -> connection.getCtx().equals(ctx));
+		setInactive(true);
+
 		server.getListeners().forEach(listener -> listener.channelExceptionCaught(this));
 	}
 
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) throws Exception {
+		if (isInactive()) {
+			return;
+		}
+
 		super.channelRead0(ctx, byteBuf);
 
 		int size = byteBuf.readableBytes();

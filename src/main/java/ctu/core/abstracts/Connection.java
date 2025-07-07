@@ -13,6 +13,8 @@ import java.util.zip.Inflater;
 
 import ctu.core.interfaces.Compression;
 import ctu.core.logger.Log;
+import ctu.core.server.Server;
+import examples.ServerLauncher.CustomConnection;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -30,6 +32,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	private long connectionID = -1;
 	private long userID = -1;
 	private final T connectionObject;
+	private boolean inactive = false;
 
 	// This field is a list of acceptable classes that the Connection class can check against when handling packets.
 	private HashMap<Integer, Class<?>> clazzesIntegerClazz = new HashMap<>();
@@ -192,7 +195,11 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	 * @param  packet
 	 * @return
 	 */
-	public int sendTCP(Packet packet) {
+	public void sendTCP(Packet packet) {
+		if (isInactive()) {
+			return;
+		}
+
 		byte[] header = new byte[3];
 
 		int key = clazzesStringInteger.get(packet.getClass().getSimpleName());
@@ -227,8 +234,6 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		}
 
 		Log.debug("Sent TCP packet: " + packetName + ", Size: " + size + " bytes.");
-
-		return bytes.length;
 	}
 
 	/**
@@ -266,8 +271,20 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	public T getConnectionObject() {
 		return connectionObject;
 	}
-	
+
 	public ChannelHandlerContext getCtx() {
 		return ctx;
+	}
+
+	public boolean isInactive() {
+		return inactive;
+	}
+
+	public void setInactive(boolean inactive) {
+		this.inactive = inactive;
+	}
+
+	public void remove(Server<CustomConnection> server) {
+		server.getConnectionMap().remove(connectionID);
 	}
 }

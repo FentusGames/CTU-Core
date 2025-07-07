@@ -48,7 +48,7 @@ public class ServerLauncher {
 			// triggered when a client disconnects correctly.
 			@Override
 			public void channelInactive(Connection<CustomConnection> connection) {
-
+				connection.remove(server); // Remove connection from the connection pool.
 			}
 
 			// Implementing the "channelExceptionCaught" method to handle a channel exception event. These events are

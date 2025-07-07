@@ -21,19 +21,23 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 	private CopyOnWriteArrayList<Listener<T>> listeners = new CopyOnWriteArrayList<>();
 	private Client<T> client;
 
-    /**
-     * Constructs a new ClientConnectionHandler with a given client, userID, and connectionObject.
-     *
-     * @param client the client managing this handler
-     * @param connectionObject the associated connection object (never null)
-     */
-    public ClientConnectionHandler(Client<T> client, T connectionObject) {
-        super(connectionObject);
-        this.client = client;
-    }
+	/**
+	 * Constructs a new ClientConnectionHandler with a given client, userID, and connectionObject.
+	 *
+	 * @param client           the client managing this handler
+	 * @param connectionObject the associated connection object (never null)
+	 */
+	public ClientConnectionHandler(Client<T> client, T connectionObject) {
+		super(connectionObject);
+		this.client = client;
+	}
 
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {
+		if (isInactive()) {
+			return;
+		}
+
 		super.channelActive(ctx);
 
 		listeners.forEach(listener -> listener.channelActive(this));
@@ -43,6 +47,14 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 
 	@Override
 	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+		if (isInactive()) {
+			return;
+		}
+
+		super.channelInactive(ctx);
+
+		setInactive(true);
+
 		listeners.forEach(listener -> listener.channelInactive(this));
 
 		Log.debug("Connection closed by server");
@@ -50,6 +62,12 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) throws Exception {
+		if (isInactive()) {
+			return;
+		}
+
+		super.channelRead0(ctx, byteBuf);
+
 		int size = byteBuf.readableBytes();
 
 		byte[] bytes = new byte[size];
@@ -64,16 +82,22 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 
 			client.setPing(Duration.between(packetPing.time, Instant.now()).toNanos());
 		}
-		
+
 		if (packet != null) {
 			listeners.forEach(listener -> listener.channelRead(this, packet));
 		}
-			
+
 		Log.debug("Received TCP packet: " + packet.getClass().getName() + ", Size: " + size + " bytes. ");
 	}
 
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+		if (isInactive()) {
+			return;
+		}
+
+		super.exceptionCaught(ctx, cause);
+
 		listeners.forEach(listener -> listener.channelExceptionCaught(this));
 
 		Log.debug("Connection closed by server: " + cause);
