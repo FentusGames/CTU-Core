@@ -284,7 +284,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		this.inactive = inactive;
 	}
 
-	public void remove(Server<CustomConnection> server) {
+	public void remove(Server<T> server) {
 		server.getConnectionMap().remove(connectionID);
 	}
 }
