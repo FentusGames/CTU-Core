@@ -40,7 +40,7 @@ import io.netty.util.concurrent.FutureListener;
  */
 public class Client<T> implements Runnable {
 	// Creating a thread pool with a cached pool of threads.
-	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(32);
+	private ScheduledExecutorService executorService = Executors.newScheduledThreadPool(32);
 
 	private final String host;
 	private final int port;
@@ -105,6 +105,27 @@ public class Client<T> implements Runnable {
 				Log.debug(String.format(String.format("Ping (M/S): %.2f", ping / 1_000_000.0F)));
 			}
 		}, (int) (timeout * 0.8F), (int) (timeout * 0.8F), TimeUnit.SECONDS);
+	}
+
+	public void reset() {
+		callbackConnect = null;
+
+		close();
+
+		// Creating a thread pool with a cached pool of threads.
+		executorService = Executors.newScheduledThreadPool(32);
+
+		if (future != null && future.channel().isOpen()) {
+			try {
+				future.channel().close().sync();
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		}
+
+		connected = false;
+		future = null;
+		connectionHandler = null;
 	}
 
 	public void sendTCP(Packet packet) {
