@@ -6,10 +6,12 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.net.ssl.SSLException;
 
+import ctu.core.abstracts.Connection;
 import ctu.core.abstracts.Packet;
 import ctu.core.interfaces.Listener;
 import ctu.core.logger.Log;
@@ -111,6 +113,14 @@ public class Server<T> implements Runnable {
 	public void broadcastTCP(Packet packet) {
 		connectionMap.forEach((userID, connection) -> {
 			connection.sendTCP(packet);
+		});
+	}
+
+	public void broadcastTCP(Packet packet, Predicate<Connection<T>> condition) {
+		connectionMap.forEach((userID, connection) -> {
+			if (condition.test(connection)) {
+				connection.sendTCP(packet);
+			}
 		});
 	}
 
