@@ -57,7 +57,7 @@ public class ServerLauncher {
 			public void channelExceptionCaught(Connection<CustomConnection> connection) {
 
 			}
-		});
+		}, "Example Thread Name");
 
 		server.start();
 	}

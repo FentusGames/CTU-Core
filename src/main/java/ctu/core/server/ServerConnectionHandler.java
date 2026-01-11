@@ -9,18 +9,20 @@ import io.netty.channel.ChannelHandlerContext;
 
 /**
  * @author     Fentus
- * 
- *             The ServerConnectionHandler class represents a connection handler for a server that communicates with clients over SSL/TLS for secure communication. It extends the Connection class and implements methods for handling active and inactive channels, exceptions, and reading from channels.\
+ *
+ *             The ServerConnectionHandler class represents a connection handler for a server that communicates with clients over SSL/TLS for secure communication.
+ *
+ *             Listener dispatch is performed by Server via per-listener single-thread executors.
+ *
  * @param  <T>
  */
 public class ServerConnectionHandler<T> extends Connection<T> {
-	private Server<T> server;
+	private final Server<T> server;
 
 	/**
-	 * Constructs a new ServerConnectionHandler with a given server, userID, and connectionObject.
+	 * Constructs a new ServerConnectionHandler with a given server and connectionObject.
 	 *
 	 * @param server           the server managing this handler
-	 * @param userID           the user ID (must be positive and non-zero)
 	 * @param connectionObject the associated connection object (never null)
 	 */
 	public ServerConnectionHandler(Server<T> server, T connectionObject) {
@@ -41,7 +43,9 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 		this.setConnectionID(id);
 
 		server.getConnectionMap().put(id, this);
-		server.getListeners().forEach(listener -> listener.channelActive(this));
+
+		// Dispatch to listeners on their own threads (one thread per listener).
+		server.dispatchChannelActive(this);
 
 		Log.debug("New connection established with id: " + id);
 	}
@@ -56,8 +60,8 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 		setInactive(true);
 
-		server.getListeners().forEach(listener -> listener.channelInactive(this));
-
+		// Dispatch to listeners on their own threads (one thread per listener).
+		server.dispatchChannelInactive(this);
 	}
 
 	@Override
@@ -70,7 +74,8 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 		setInactive(true);
 
-		server.getListeners().forEach(listener -> listener.channelExceptionCaught(this));
+		// Dispatch to listeners on their own threads (one thread per listener).
+		server.dispatchChannelExceptionCaught(this);
 	}
 
 	@Override
@@ -89,16 +94,18 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 		// Convert bytes to packet
 		Packet packet = bytesToPacket(bytes);
 
-		// Send the ping packet right back.
+		// Send the ping packet right back (keep this immediate).
 		if (packet instanceof PacketPing) {
 			sendTCP(packet);
 		}
 
-		// Do something with the packet
+		// Dispatch to listeners on their own threads (one thread per listener).
 		if (packet != null) {
-			server.getListeners().forEach(listener -> listener.channelRead(this, packet));
+			server.dispatchChannelRead(this, packet);
 		}
 
-		Log.debug("Received TCP packet: " + packet.getClass().getName() + ", Size: " + size + " bytes. ");
+		// Guard against packet being null to avoid NPE in logs.
+		String packetName = (packet == null) ? "null" : packet.getClass().getName();
+		Log.debug("Received TCP packet: " + packetName + ", Size: " + size + " bytes. ");
 	}
 }

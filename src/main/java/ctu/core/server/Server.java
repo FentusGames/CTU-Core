@@ -1,11 +1,10 @@
 package ctu.core.server;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -33,15 +32,18 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 
 /**
- * 
+ *
  * @author     Fentus
- * 
- *             The Server class represents a server that listens for incoming client connections and handles them. It is constructed with the specified port number, and the SSL context is initialized during construction with the server's certificate and private key for secure communication. To start the server, call the start() method, which binds the server to the specified port, starts the event loop groups, and initializes the handlers for incoming client connections.
+ *
+ *             The Server class represents a server that listens for incoming client connections and handles them.
+ *
+ *             Change: - addListener(listener, name) registers a listener with a friendly name for logging/debug visibility. - Listener callbacks are dispatched using a dedicated Thread per listener.
+ *
+ *             Notes: - Each listener has a single worker thread that processes events sequentially (preserves order for that listener). - Slow listeners will not block Netty threads, but can build up their own queue. - Listener implementations must still be thread-safe with respect to shared state.
+ *
  * @param  <T>
  */
 public class Server<T> implements Runnable {
-	// Creating a thread pool with a cached pool of threads.
-	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(32);
 
 	private final ConcurrentHashMap<Long, ServerConnectionHandler<T>> connectionMap = new ConcurrentHashMap<>();
 
@@ -56,15 +58,19 @@ public class Server<T> implements Runnable {
 
 	private int connectionId;
 
-	private HashMap<Integer, Class<?>> clazzes = new HashMap<>();
-
-	private ArrayList<Listener<T>> listeners = new ArrayList<>();
-
+	private final HashMap<Integer, Class<?>> clazzes = new HashMap<>();
 	private int key = 0;
 
 	/**
+	 * Named listener registrations.
+	 *
+	 * CopyOnWriteArrayList: - Safe iteration without external locks. - Great when dispatch is frequent and listeners are rarely added/removed.
+	 */
+	private final CopyOnWriteArrayList<NamedListener<T>> listeners = new CopyOnWriteArrayList<>();
+
+	/**
 	 * Constructs a new Server object with the given port number. It also initializes the SSL context with the specified SSL provider, protocols, and the server's certificate and private key for secure communication.
-	 * 
+	 *
 	 * @param port                     the port to bind the server
 	 * @param timeout                  timeout for read/write handlers in seconds
 	 * @param connectionObjectSupplier supplier to create new non-null connection objects for each connection
@@ -77,13 +83,14 @@ public class Server<T> implements Runnable {
 		try {
 			// @formatter:off
 			this.sslCtx = SslContextBuilder
-					.forServer(new File("server.crt"), new File("server.key"))
-					.sslProvider(SslProvider.JDK)
-					.protocols("TLSv1.3")
-					.build();
+				.forServer(new File("server.crt"), new File("server.key"))
+				.sslProvider(SslProvider.JDK)
+				.protocols("TLSv1.3")
+				.build();
 			// @formatter:on
 		} catch (SSLException e) {
-			e.printStackTrace();
+			// Make SSL failures loud/early.
+			throw new RuntimeException(e);
 		}
 	}
 
@@ -92,10 +99,15 @@ public class Server<T> implements Runnable {
 	}
 
 	/**
-	 * Starts the server with the specified SSL context and ensures that SSL is being used and the connection was successful.
+	 * Starts the server by running the Netty bootstrap on a dedicated thread.
+	 *
+	 * If you want a non-daemon thread, setDaemon(false).
 	 */
 	public void start() {
-		executorService.execute(this);
+		Thread t = new Thread(this);
+		t.setName("NettyServer-" + port);
+		t.setDaemon(true);
+		t.start();
 	}
 
 	public ConcurrentHashMap<Long, ServerConnectionHandler<T>> getConnectionMap() {
@@ -111,9 +123,7 @@ public class Server<T> implements Runnable {
 	}
 
 	public void broadcastTCP(Packet packet) {
-		connectionMap.forEach((userID, connection) -> {
-			connection.sendTCP(packet);
-		});
+		connectionMap.forEach((userID, connection) -> connection.sendTCP(packet));
 	}
 
 	public void broadcastTCP(Packet packet, Predicate<Connection<T>> condition) {
@@ -124,48 +134,126 @@ public class Server<T> implements Runnable {
 		});
 	}
 
+	/**
+	 * Register a listener with a friendly name.
+	 *
+	 * Each listener gets a dedicated worker thread that processes events sequentially.
+	 */
+	public void addListener(Listener<T> listener, String name) {
+		Objects.requireNonNull(listener, "listener");
+		Objects.requireNonNull(name, "name");
+
+		NamedListener<T> nl = new NamedListener<>(listener, name);
+		listeners.add(nl);
+		nl.start();
+	}
+
+	public void removeListener(Listener<T> listener) {
+		Objects.requireNonNull(listener, "listener");
+
+		listeners.removeIf(nl -> {
+			if (nl.listener == listener) {
+				nl.shutdown();
+				return true;
+			}
+			return false;
+		});
+	}
+
+	/**
+	 * Returns ONLY the raw listener instances (no names) for legacy callers.
+	 *
+	 * Note: This returns a new list snapshot so callers can't mutate internal state.
+	 */
+	public java.util.ArrayList<Listener<T>> getListeners() {
+		java.util.ArrayList<Listener<T>> out = new java.util.ArrayList<>();
+		for (NamedListener<T> nl : listeners) {
+			out.add(nl.listener);
+		}
+		return out;
+	}
+
+	public void dispatchChannelActive(ServerConnectionHandler<T> connection) {
+		forEachListenerEnqueue(nl -> nl.listener.channelActive(connection), "channelActive");
+	}
+
+	public void dispatchChannelInactive(ServerConnectionHandler<T> connection) {
+		forEachListenerEnqueue(nl -> nl.listener.channelInactive(connection), "channelInactive");
+	}
+
+	public void dispatchChannelExceptionCaught(ServerConnectionHandler<T> connection) {
+		forEachListenerEnqueue(nl -> nl.listener.channelExceptionCaught(connection), "channelExceptionCaught");
+	}
+
+	public void dispatchChannelRead(ServerConnectionHandler<T> connection, Packet packet) {
+		forEachListenerEnqueue(nl -> nl.listener.channelRead(connection, packet), "channelRead");
+	}
+
+	@FunctionalInterface
+	private interface NamedListenerAction<T> {
+		void run(NamedListener<T> nl);
+	}
+
+	/**
+	 * Enqueue a callback to every listener's dedicated thread.
+	 *
+	 * Each listener processes events sequentially, preserving ordering for that listener.
+	 */
+	private void forEachListenerEnqueue(NamedListenerAction<T> action, String opName) {
+		for (NamedListener<T> nl : listeners) {
+			nl.enqueue(() -> {
+				try {
+					action.run(nl);
+				} catch (Throwable t) {
+					Log.debug("Listener [" + nl.name + "] failed during " + opName + ": " + t.getMessage());
+					t.printStackTrace();
+				}
+			});
+		}
+	}
+
+	/*
+	 * ========================= Netty bootstrap =========================
+	 */
+
 	@Override
 	public void run() {
 		try {
-			// Create a new Bootstrap instance.
 			ServerBootstrap bootstrap = new ServerBootstrap();
 
-			// Set the event loop group, channel, and handler.
 			bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class).childHandler(new ChannelInitializer<SocketChannel>() {
 				@Override
 				public void initChannel(SocketChannel ch) throws Exception {
-					// Get the pipeline for the channel.
 					ChannelPipeline pipeline = ch.pipeline();
 
-					// Add the SSL handler to the pipeline.
+					// TLS
 					pipeline.addLast(sslCtx.newHandler(ch.alloc()));
 
-					// Add a basic timeout if the client has not sent or received information in past X seconds.
-					ch.pipeline().addLast(new ReadTimeoutHandler(timeout)).addLast(new WriteTimeoutHandler(timeout));
+					// Timeouts
+					pipeline.addLast(new ReadTimeoutHandler(timeout));
+					pipeline.addLast(new WriteTimeoutHandler(timeout));
 
+					// Connection object
 					T connectionObject = connectionObjectSupplier.get();
 					if (connectionObject == null) {
 						throw new IllegalStateException("Supplier provided null connectionObject.");
 					}
 
+					// Handler
 					ServerConnectionHandler<T> connectionHandler = new ServerConnectionHandler<>(getServer(), connectionObject);
 
-					// Set the classes for the connection handler.
 					connectionHandler.setClazzes(clazzes);
 
-					// Add the connection handler to the pipeline.
 					pipeline.addLast(connectionHandler);
 
-					// Add a channel inbound handler adapter to the pipeline.
+					// Confirm SSL is present or close.
 					pipeline.addLast(new ChannelInboundHandlerAdapter() {
 						@Override
 						public void channelActive(ChannelHandlerContext ctx) throws Exception {
-							// Check if both the client and server have SSL/TLS enabled.
 							if (ctx.pipeline().get(SslHandler.class) != null) {
 								Log.debug("Both client and server have SSL/TLS enabled");
 							} else {
 								Log.debug("Either client or server does not have SSL/TLS enabled, disconnecting both.");
-								// Close the channel if SSL/TLS is not enabled.
 								ctx.close();
 							}
 						}
@@ -173,43 +261,20 @@ public class Server<T> implements Runnable {
 				}
 			});
 
-			ChannelFuture future = null;
-
-			// Bind server to the specified port
-			try {
-				future = bootstrap.bind(port).sync();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-
-			// Print message indicating that server has started
+			ChannelFuture future = bootstrap.bind(port).sync();
 			Log.debug("Netty server started on port " + port);
 
-			// Wait until server channel closes
-			try {
-				future.channel().closeFuture().sync();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+			future.channel().closeFuture().sync();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
 		} finally {
+			// Stop listener worker threads
+			for (NamedListener<T> nl : listeners) {
+				nl.shutdown();
+			}
+
 			workerGroup.shutdownGracefully();
 			bossGroup.shutdownGracefully();
 		}
-	}
-
-	public void addListener(Listener<T> listener) {
-		listeners.add(listener);
-	}
-
-	public void removeLitener(Listener<T> listener) {
-		listeners.remove(listener);
-	}
-
-	public ArrayList<Listener<T>> getListeners() {
-		return listeners;
-	}
-
-	public ScheduledExecutorService getExecutorService() {
-		return executorService;
 	}
 }
