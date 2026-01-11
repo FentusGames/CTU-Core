@@ -3,11 +3,6 @@ package ctu.core.server;
 import ctu.core.interfaces.Listener;
 import ctu.core.logger.Log;
 
-/**
- * Internal named wrapper for a listener.
- *
- * Uses a single worker thread + a blocking queue to process events sequentially.
- */
 public class NamedListener<T> {
 	final Listener<T> listener;
 	final String name;
@@ -29,26 +24,23 @@ public class NamedListener<T> {
 					Runnable r = queue.take();
 					r.run();
 				} catch (InterruptedException e) {
-					// Respect shutdown, otherwise keep going.
 					if (!running) {
 						break;
 					}
 					Thread.currentThread().interrupt();
 				} catch (Throwable t) {
-					// Last-resort guard: keep the thread alive.
 					Log.debug("Listener worker [" + name + "] crashed: " + t.getMessage());
 					t.printStackTrace();
 				}
 			}
 		});
 
-		thread.setName("Listener-" + name);
+		thread.setName(name);
 		thread.setDaemon(true);
 		thread.start();
 	}
 
 	void enqueue(Runnable r) {
-		// If already shutting down, drop the work silently.
 		if (!running) {
 			return;
 		}

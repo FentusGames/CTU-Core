@@ -108,7 +108,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			ByteArrayOutputStream baos = null;
 			Deflater dfl = new Deflater();
 
-			dfl.setLevel(Deflater.FILTERED);
+			dfl.setLevel(Deflater.BEST_SPEED); // TODO: Evaluate this.
 			dfl.setInput(bytes);
 			dfl.finish();
 
