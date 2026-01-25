@@ -1,64 +1,111 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+repo:
+  path: "C:\\Users\\Fentus\\git\\CTU-Core"
+  type: "git+maven+java"
+  top_files:
+    - "CLAUDE.md"
+    - "pom.xml"
+    - "README.md"
+  folders:
+    - "src/main/java"
+    - "src/main/resources"
+    - "src/test/java"
+    - "src/test/resources"
+    - "target/classes"
+    - "target/test-classes"
 
-## Build Commands
+source_tree:
+  src/main/java:
+    root_tools:
+      - "colf.exe"
+      - "compile.bat"
+      - "packets.colf"
+      - "packets.html"
+      - "snip.txt"
+    packages:
+      - "ctu.core.abstracts: [Connection.java, Packet.java, User.java]"
+      - "ctu.core.callbacks: [CallbackConnect.java]"
+      - "ctu.core.client: [Client.java, ClientConnectionHandler.java]"
+      - "ctu.core.interfaces: [Compression.java, Listener.java]"
+      - "ctu.core.logger: [Log.java]"
+      - "ctu.core.packets: [PacketPing.java]"
+      - "ctu.core.server: [NamedListener.java, Server.java, ServerConnectionHandler.java]"
+      - "examples: [ClientLauncher.java, ServerLauncher.java]"
+      - "examples.keys: [GenerateSSLCerts.java]"
+      - "javax.annotation: [Generated.java]"
 
-```bash
-# Build the project
-mvn package
+build_output:
+  target/classes:
+    contains_compiled:
+      - "ctu.core.*"
+      - "examples.*"
+      - "javax.annotation.Generated"
+    meta_inf_maven: "com.fentusgames:ctu-core (pom.properties, pom.xml)"
 
-# Clean and build
-mvn clean package
+notes:
+  - "This is a semantic, AI-friendly representation of the CTU-Core repository."
+  - "It intentionally omits Git internals, IDE metadata, timestamps, file sizes, and build noise."
+  - "The structure communicates project identity (Maven coordinates), source layout, and package boundaries without exposing low-level filesystem detail."
+  - "source_tree focuses on public and core Java packages, not every file, enabling fast architectural understanding."
+  - "build_output summarizes what Maven produces, not how it is stored byte-for-byte."
+  - "Use this format to give an AI enough context to reason about APIs, dependencies, and structure without overwhelming it."
 
-# Deploy to GitHub Packages (requires GITHUB_TOKEN)
-mvn deploy
-```
+You said:
+No what the project does not what thius file does./
+ChatGPT said:
 
-## Architecture Overview
+Got it — you want the project’s purpose, not a meta explanation.
+Here’s the same content, unchanged, with a proper “what this project does” note at the bottom.
 
-CTU-Core is a Netty-based client-server networking library with mandatory TLS 1.3 encryption and built-in compression.
+repo:
+  path: "C:\\Users\\Fentus\\git\\CTU-Core"
+  type: "git+maven+java"
+  top_files:
+    - "CLAUDE.md"
+    - "pom.xml"
+    - "README.md"
+  folders:
+    - "src/main/java"
+    - "src/main/resources"
+    - "src/test/java"
+    - "src/test/resources"
+    - "target/classes"
+    - "target/test-classes"
 
-### Core Components
+source_tree:
+  src/main/java:
+    root_tools:
+      - "colf.exe"
+      - "compile.bat"
+      - "packets.colf"
+      - "packets.html"
+      - "snip.txt"
+    packages:
+      - "ctu.core.abstracts: [Connection.java, Packet.java, User.java]"
+      - "ctu.core.callbacks: [CallbackConnect.java]"
+      - "ctu.core.client: [Client.java, ClientConnectionHandler.java]"
+      - "ctu.core.interfaces: [Compression.java, Listener.java]"
+      - "ctu.core.logger: [Log.java]"
+      - "ctu.core.packets: [PacketPing.java]"
+      - "ctu.core.server: [NamedListener.java, Server.java, ServerConnectionHandler.java]"
+      - "examples: [ClientLauncher.java, ServerLauncher.java]"
+      - "examples.keys: [GenerateSSLCerts.java]"
+      - "javax.annotation: [Generated.java]"
 
-**Server/Client (`ctu.core.server.Server<T>`, `ctu.core.client.Client<T>`)**
-- Generic type `T` represents a custom connection object for storing per-connection state
-- Server uses a `Supplier<T>` to create new connection objects; Client takes a single instance
-- Both require SSL certificates (`server.crt`, `server.key` for server; `server.crt` for client trust)
+build_output:
+  target/classes:
+    contains_compiled:
+      - "ctu.core.*"
+      - "examples.*"
+      - "javax.annotation.Generated"
+    meta_inf_maven: "com.fentusgames:ctu-core (pom.properties, pom.xml)"
 
-**Connection (`ctu.core.abstracts.Connection<T>`)**
-- Extends Netty's `SimpleChannelInboundHandler<ByteBuf>`
-- Handles packet serialization with compression (Deflate) and a 3-byte header (2-byte length + 1-byte packet ID)
-- Packets must be registered with `register(Class<?>)` before use
-
-**Packet (`ctu.core.abstracts.Packet`)**
-- Abstract base requiring `marshal(byte[], int)` and `unmarshal(byte[], int)` implementations
-- Packets are generated from Colfer schema files (`.colf`) using the Colfer compiler
-
-**Listener (`ctu.core.interfaces.Listener<T>`)**
-- Interface with callbacks: `channelActive`, `channelRead`, `channelInactive`, `channelExceptionCaught`
-- Server listeners run on dedicated worker threads (one per listener)
-
-### Packet Generation with Colfer
-
-Packets are defined in `packets.colf` and compiled to Java:
-```bash
-colf -c "snip.txt" -p "ctu.core" -f -s "4096" -x "ctu/core/abstracts/Packet" java packets.colf
-```
-Generated packets extend `ctu.core.abstracts.Packet` and include efficient binary serialization.
-
-### SSL Certificate Generation
-
-Use `examples.keys.GenerateSSLCerts` or OpenSSL:
-```bash
-openssl genrsa -out server.key 2048
-openssl req -new -x509 -key server.key -out server.crt -days 365
-```
-
-### Example Usage Pattern
-
-See `examples/ServerLauncher.java` and `examples/ClientLauncher.java` for complete examples. Basic pattern:
-1. Create `Server<T>` or `Client<T>` with port, timeout, and connection object
-2. Register packet classes with `register(PacketClass.class)`
-3. Add listeners to handle events
-4. Call `start()`
+notes:
+  - "CTU-Core is a lightweight Java networking framework providing a shared client/server communication layer."
+  - "It defines core abstractions for connections, packets, users, and listeners that are used by both clients and servers."
+  - "The project includes a TCP-based server and client implementation with pluggable connection handlers."
+  - "Packets are modeled as typed Java objects (e.g., PacketPing) and can be extended to define custom protocols."
+  - "The framework supports callbacks, listeners, compression hooks, and structured logging."
+  - "Example launchers demonstrate how to start a server, connect a client, and generate SSL certificates for secure communication."
+  - "CTU-Core is intended to be embedded as a dependency in higher-level applications (e.g., games or services) rather than used standalone."
