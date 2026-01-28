@@ -106,6 +106,7 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 		// Guard against packet being null to avoid NPE in logs.
 		String packetName = (packet == null) ? "null" : packet.getClass().getName();
+
 		Log.debug("Received TCP packet: " + packetName + ", Size: " + size + " bytes. ");
 	}
 }

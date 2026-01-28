@@ -232,7 +232,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			});
 		}
 
-		// TODO: Log.debug("Sent TCP packet: " + packetName + ", Size: " + size + " bytes.");
+		Log.debug("Sent TCP packet: " + packetName + ", Size: " + size + " bytes.");
 	}
 
 	/**
