@@ -2,59 +2,113 @@ package examples;
 
 import ctu.core.abstracts.Connection;
 import ctu.core.abstracts.Packet;
+import ctu.core.callbacks.CallbackConnect;
 import ctu.core.client.Client;
 import ctu.core.interfaces.Listener;
+import ctu.core.logger.Log;
 import ctu.core.packets.PacketPing;
 
 /**
- * @author Fentus
- * 
- *         This is an example package that contains a class called "ClientLauncher". The class launches a client that connects to a server at localhost and port number 9091. The client uses a thread pool to execute tasks in a multi-threaded environment. Additionally, the client registers a "PacketPing" class to receive and send packets from the server. Furthermore, the client adds a listener that implements the "Listener" interface to handle channel events. Finally, the "ExecutorService" submits the client to the thread pool for execution.
+ * Example Client demonstrating CTU-Core features:
+ * - Connecting to a server with TLS
+ * - Packet registration and handling
+ * - Connection callbacks
+ * - Listener-based event handling
+ *
+ * Usage:
+ *   java -jar client.jar
+ *
+ * IMPORTANT: TLS Timing
+ *   - CallbackConnect.execute(true) means TCP connected, but TLS handshake is still in progress
+ *   - Wait for channelActive() before sending packets - this is when TLS is ready
  */
 public class ClientLauncher {
-	// Used for storing and retrieving custom data in the connection object.
-	public static class CustomConnection {
 
+	/**
+	 * Custom connection object for storing client-side state.
+	 */
+	public static class ConnectionData {
+		private long id;
+		private String identifier;
+
+		public long getId() {
+			return id;
+		}
+
+		public void setId(long id) {
+			this.id = id;
+		}
+
+		public String getIdentifier() {
+			return identifier;
+		}
+
+		public void setIdentifier(String identifier) {
+			this.identifier = identifier;
+		}
 	}
 
 	public static void main(String[] args) {
-		// Creating a new client that connects to the server at an address and port 9091.
-		Client<CustomConnection> client = new Client<CustomConnection>("localhost", 9091, 10, new CustomConnection());
+		// Create client connecting to server
+		// Parameters: host, port, timeout (seconds), connection object
+		Client<ConnectionData> client = new Client<>("localhost", 29902, 10, new ConnectionData());
 
-		// Registering the "PacketPing" class allows the client to send and receive this packet.
+		// Register packets - ORDER MUST BE IDENTICAL to the server
 		client.register(PacketPing.class);
+		// Register your custom packets here (same order as server):
+		// client.register(YourPacket.class);
 
-		// Adding a listener to the client to handle connection events.
-		client.addListener(new Listener<CustomConnection>() {
-			// Implementing the "channelActive" method to handle a channel active event. These events are only triggered
-			// when a client connects.
+		// Add listener for handling server events
+		client.addListener(new Listener<ConnectionData>() {
 			@Override
-			public void channelActive(Connection<CustomConnection> connection) {
+			public void channelActive(Connection<ConnectionData> connection) {
+				// Called after TLS handshake completes - safe to send packets now
+				Log.debug("Connected to server (TLS ready)");
 
+				// Send a ping to test the connection
+				PacketPing ping = new PacketPing();
+				connection.sendTCP(ping);
 			}
 
-			// Implementing the "channelRead" method to handle a channel read event. These events are only triggered
-			// when a client sends a packet.
 			@Override
-			public void channelRead(Connection<CustomConnection> connection, Packet packet) {
-
+			public void channelRead(Connection<ConnectionData> connection, Packet packet) {
+				// Called when a packet is received from the server
+				if (packet instanceof PacketPing) {
+					Log.debug("Received ping response from server");
+				}
 			}
 
-			// Implementing the "channelInactive" method to handle a channel inactive event. These events are only
-			// triggered when a client disconnects correctly.
 			@Override
-			public void channelInactive(Connection<CustomConnection> connection) {
-
+			public void channelInactive(Connection<ConnectionData> connection) {
+				// Called when disconnected from server normally
+				Log.debug("Disconnected from server");
 			}
 
-			// Implementing the "channelExceptionCaught" method to handle a channel exception event. These events are
-			// only triggered when a client disconnects incorrectly.
 			@Override
-			public void channelExceptionCaught(Connection<CustomConnection> connection) {
-
+			public void channelExceptionCaught(Connection<ConnectionData> connection) {
+				// Called when disconnected due to an error
+				Log.debug("Connection error");
 			}
 		});
 
-		client.start();
+		// Connect with callback
+		client.start(new CallbackConnect() {
+			@Override
+			public void execute(boolean success) {
+				if (success) {
+					Log.debug("TCP connection established, TLS handshake in progress...");
+					// IMPORTANT: Don't send packets here - wait for channelActive()
+				} else {
+					Log.debug("Failed to connect to server");
+				}
+			}
+		});
+
+		// Keep main thread alive
+		try {
+			Thread.currentThread().join();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
 	}
 }

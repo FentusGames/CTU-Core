@@ -52,10 +52,6 @@ public class Server<T> implements Runnable {
 	/** Special shard ID for connections not yet assigned */
 	public static final int UNASSIGNED_SHARD = -1;
 
-	/** @deprecated Use getShardConnections(shardId) for better performance */
-	@Deprecated
-	private final ConcurrentHashMap<Long, ServerConnectionHandler<T>> connectionMap = new ConcurrentHashMap<>();
-
 	/** Shard ID -> connections in that shard */
 	private final ConcurrentHashMap<Integer, ConcurrentHashMap<Long, ServerConnectionHandler<T>>> shardedConnections = new ConcurrentHashMap<>();
 
@@ -128,10 +124,6 @@ public class Server<T> implements Runnable {
 		t.start();
 	}
 
-	public ConcurrentHashMap<Long, ServerConnectionHandler<T>> getConnectionMap() {
-		return connectionMap;
-	}
-
 	public long getNextConnectionId() {
 		return connectionId++;
 	}
@@ -140,16 +132,24 @@ public class Server<T> implements Runnable {
 		clazzes.put(key++, clazz);
 	}
 
+	public HashMap<Integer, Class<?>> getRegisteredPackets() {
+		return clazzes;
+	}
+
 	public void broadcastTCP(Packet packet) {
-		connectionMap.forEach((userID, connection) -> connection.sendTCP(packet));
+		for (ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard : shardedConnections.values()) {
+			shard.forEach((connId, handler) -> handler.sendTCP(packet));
+		}
 	}
 
 	public void broadcastTCP(Packet packet, Predicate<Connection<T>> condition) {
-		connectionMap.forEach((userID, connection) -> {
-			if (condition.test(connection)) {
-				connection.sendTCP(packet);
-			}
-		});
+		for (ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard : shardedConnections.values()) {
+			shard.forEach((connId, handler) -> {
+				if (condition.test(handler)) {
+					handler.sendTCP(packet);
+				}
+			});
+		}
 	}
 
 	/*
@@ -198,9 +198,6 @@ public class Server<T> implements Runnable {
 			shardedConnections.computeIfAbsent(shardId, k -> new ConcurrentHashMap<>());
 		shard.put(connectionId, handler);
 		connectionShardMap.put(connectionId, shardId);
-
-		// Also maintain legacy connectionMap for backward compatibility
-		connectionMap.put(connectionId, handler);
 	}
 
 	/**
@@ -267,9 +264,6 @@ public class Server<T> implements Runnable {
 	 * @return The removed handler, or null if not found
 	 */
 	public ServerConnectionHandler<T> removeConnection(long connectionId) {
-		// Also remove from legacy connectionMap
-		connectionMap.remove(connectionId);
-
 		Integer shardId = connectionShardMap.remove(connectionId);
 		if (shardId == null) {
 			return null;

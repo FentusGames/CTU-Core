@@ -3,62 +3,133 @@ package examples;
 import ctu.core.abstracts.Connection;
 import ctu.core.abstracts.Packet;
 import ctu.core.interfaces.Listener;
+import ctu.core.logger.Log;
 import ctu.core.packets.PacketPing;
 import ctu.core.server.Server;
+import ctu.core.server.config.ServerArgs;
+import ctu.core.server.config.ServerConfig;
+import ctu.core.server.config.ServerType;
 
 /**
- * @author Fentus
- * 
- *         This is an example package containing a class called "ServerLauncher". The class launches a server that
- *         listens on port number 9091 for incoming connections from clients. The server uses a thread pool to execute
- *         tasks in a multithreaded environment. It registers a "PacketPing" class to send packets to the clients and
- *         adds a listener that implements the "Listener" interface to handle channel events. The "ExecutorService"
- *         submits the server to the thread pool for execution.
+ * Example Server demonstrating CTU-Core features:
+ * - Command-line argument parsing
+ * - Server configuration
+ * - Packet registration and handling
+ * - Listener-based event handling with dedicated worker threads
+ *
+ * Usage:
+ *   java -jar server.jar serverId=server-1 port=29902
+ *
+ * Arguments:
+ *   serverId=<id>       Server identifier (default: server-1)
+ *   port=<port>         Port to listen on (default: 29902)
+ *   publicHost=<host>   Public hostname for client connections
+ *   publicPort=<port>   Public port for client connections
  */
 public class ServerLauncher {
-	// Used for storing and retrieving custom data in the connection object.
-	public static class CustomConnection {
 
+	/**
+	 * Custom connection object for storing per-connection state.
+	 * Extend this class to add your own fields.
+	 */
+	public static class ConnectionData {
+		private long oderId;
+		private String identifier;
+
+		public long getUserId() {
+			return oderId;
+		}
+
+		public void setUserId(long userId) {
+			this.oderId = userId;
+		}
+
+		public String getIdentifier() {
+			return identifier;
+		}
+
+		public void setIdentifier(String identifier) {
+			this.identifier = identifier;
+		}
 	}
 
 	public static void main(String[] args) {
-		// Creating a new server that listens on port number 9091 for incoming connections from clients.
-		Server<CustomConnection> server = new Server<CustomConnection>(9091, 10, CustomConnection::new);
+		// Parse command-line arguments
+		ServerArgs serverArgs = ServerArgs.parse(args);
 
-		// Registering the "PacketPing" class allows the server to send and receive this packet.
+		// Build server configuration
+		ServerConfig config = buildConfig(serverArgs);
+
+		Log.debug("Starting Server: " + config.getServerId() + " on port " + config.getPort());
+
+		// Create server with connection timeout (seconds) and connection object supplier
+		Server<ConnectionData> server = new Server<>(config.getPort(), 10, ConnectionData::new);
+
+		// Register packets - ORDER MUST BE IDENTICAL across all servers and clients
 		server.register(PacketPing.class);
+		// Register your custom packets here:
+		// server.register(YourPacket.class);
 
-		// Adding a listener to the server to handle connection events.
-		server.addListener(new Listener<CustomConnection>() {
-			// Implementing the "channelActive" method to handle a channel active event. These events are only triggered
-			// when a client connects.
+		// Add listeners with dedicated worker threads
+		// Each listener runs on its own thread for parallel processing
+		server.addListener(new Listener<ConnectionData>() {
 			@Override
-			public void channelActive(Connection<CustomConnection> connection) {
-
+			public void channelActive(Connection<ConnectionData> connection) {
+				// Called when a client connects (after TLS handshake)
+				Log.debug("Client connected: " + connection.getConnectionID());
 			}
 
-			// Implementing the "channelRead" method to handle a channel read event. These events are only triggered
-			// when a client sends a packet.
 			@Override
-			public void channelRead(Connection<CustomConnection> connection, Packet packet) {
-
+			public void channelRead(Connection<ConnectionData> connection, Packet packet) {
+				// Called when a packet is received from a client
+				if (packet instanceof PacketPing) {
+					// Echo ping back to client
+					connection.sendTCP(packet);
+				}
 			}
 
-			// Implementing the "channelInactive" method to handle a channel inactive event. These events are only
-			// triggered when a client disconnects correctly.
 			@Override
-			public void channelInactive(Connection<CustomConnection> connection) {
-				connection.remove(server); // Remove connection from the connection pool.
+			public void channelInactive(Connection<ConnectionData> connection) {
+				// Called when a client disconnects normally
+				Log.debug("Client disconnected: " + connection.getConnectionID());
 			}
 
-			// Implementing the "channelExceptionCaught" method to handle a channel exception event. These events are
-			// only triggered when a client disconnects incorrectly.
 			@Override
-			public void channelExceptionCaught(Connection<CustomConnection> connection) {
-
+			public void channelExceptionCaught(Connection<ConnectionData> connection) {
+				// Called when a client disconnects due to an error
+				Log.debug("Client error: " + connection.getConnectionID());
 			}
-		}, "Example Thread Name");
+		}, "MainListener");
 
+		// Start the server
 		server.start();
+
+		Log.debug("Server started on port " + config.getPort());
+
+		// Keep main thread alive
+		try {
+			Thread.currentThread().join();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	private static ServerConfig buildConfig(ServerArgs args) {
+		ServerConfig config = new ServerConfig();
+
+		// Set defaults
+		config.setServerId("server-1");
+		config.setServerType(ServerType.GAME);
+		config.setHost("0.0.0.0");
+		config.setPort(29902);
+		config.setPublicHost("localhost");
+		config.setPublicPort(29902);
+		config.setTransferTokenSecret("change-me-in-production");
+		config.setTransferTokenExpirySeconds(30);
+
+		// Apply command-line args (override defaults)
+		config.applyArgs(args);
+
+		return config;
 	}
 }
