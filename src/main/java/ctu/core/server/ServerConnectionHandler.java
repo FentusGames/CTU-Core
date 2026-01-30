@@ -42,7 +42,8 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 		this.setConnectionID(id);
 
-		server.getConnectionMap().put(id, this);
+		// Add to unassigned shard initially (will be moved to correct shard on login)
+		server.addConnectionToShard(id, this, Server.UNASSIGNED_SHARD);
 
 		// Dispatch to listeners on their own threads (one thread per listener).
 		server.dispatchChannelActive(this);

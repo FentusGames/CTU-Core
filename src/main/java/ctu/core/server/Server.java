@@ -1,8 +1,12 @@
 package ctu.core.server;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
@@ -45,7 +49,21 @@ import io.netty.handler.timeout.WriteTimeoutHandler;
  */
 public class Server<T> implements Runnable {
 
+	/** Special shard ID for connections not yet assigned */
+	public static final int UNASSIGNED_SHARD = -1;
+
+	/** @deprecated Use getShardConnections(shardId) for better performance */
+	@Deprecated
 	private final ConcurrentHashMap<Long, ServerConnectionHandler<T>> connectionMap = new ConcurrentHashMap<>();
+
+	/** Shard ID -> connections in that shard */
+	private final ConcurrentHashMap<Integer, ConcurrentHashMap<Long, ServerConnectionHandler<T>>> shardedConnections = new ConcurrentHashMap<>();
+
+	/** Connection ID -> Shard ID (reverse lookup for fast moves) */
+	private final ConcurrentHashMap<Long, Integer> connectionShardMap = new ConcurrentHashMap<>();
+
+	/** System ID -> Shard ID mapping (configured at startup) */
+	private volatile Map<Long, Integer> systemToShardMap = Collections.emptyMap();
 
 	private final EventLoopGroup bossGroup = new NioEventLoopGroup();
 	private final EventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -132,6 +150,213 @@ public class Server<T> implements Runnable {
 				connection.sendTCP(packet);
 			}
 		});
+	}
+
+	/*
+	 * ========================= Sharding API =========================
+	 */
+
+	/**
+	 * Configure the system-to-shard mapping. Must be called before connections arrive.
+	 *
+	 * @param systemsByThread Map from shard/thread index (0 to N-1) to list of system IDs
+	 */
+	public void configureShards(Map<Integer, List<Long>> systemsByThread) {
+		Map<Long, Integer> mapping = new HashMap<>();
+
+		for (Map.Entry<Integer, List<Long>> entry : systemsByThread.entrySet()) {
+			int shardId = entry.getKey();
+			for (Long systemId : entry.getValue()) {
+				mapping.put(systemId, shardId);
+			}
+			// Pre-create shard maps
+			shardedConnections.putIfAbsent(shardId, new ConcurrentHashMap<>());
+		}
+
+		// Create unassigned shard
+		shardedConnections.putIfAbsent(UNASSIGNED_SHARD, new ConcurrentHashMap<>());
+
+		this.systemToShardMap = Collections.unmodifiableMap(mapping);
+
+		Log.debug("Configured " + systemsByThread.size() + " shards with " + mapping.size() + " system mappings");
+	}
+
+	/**
+	 * Get the shard ID for a given system ID.
+	 * Returns UNASSIGNED_SHARD if the system is not mapped.
+	 */
+	public int getShardForSystem(long systemId) {
+		return systemToShardMap.getOrDefault(systemId, UNASSIGNED_SHARD);
+	}
+
+	/**
+	 * Add a new connection to a specific shard.
+	 * Called during channelActive().
+	 */
+	void addConnectionToShard(long connectionId, ServerConnectionHandler<T> handler, int shardId) {
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard =
+			shardedConnections.computeIfAbsent(shardId, k -> new ConcurrentHashMap<>());
+		shard.put(connectionId, handler);
+		connectionShardMap.put(connectionId, shardId);
+
+		// Also maintain legacy connectionMap for backward compatibility
+		connectionMap.put(connectionId, handler);
+	}
+
+	/**
+	 * Assign a connection to a specific shard based on system ID.
+	 * Thread-safe: uses copy-then-remove pattern for safe concurrent iteration.
+	 *
+	 * @param connectionId The connection ID
+	 * @param systemId The system ID to assign to (determines shard)
+	 * @return true if moved successfully, false if connection not found
+	 */
+	public boolean assignConnectionToShard(long connectionId, long systemId) {
+		int targetShardId = getShardForSystem(systemId);
+		return moveConnectionToShard(connectionId, targetShardId);
+	}
+
+	/**
+	 * Move a connection to a specific shard.
+	 * Uses copy-then-remove pattern: brief duplication is safer than brief absence.
+	 *
+	 * @param connectionId The connection ID
+	 * @param targetShardId The target shard ID
+	 * @return true if moved, false if connection not found
+	 */
+	public boolean moveConnectionToShard(long connectionId, int targetShardId) {
+		Integer currentShardId = connectionShardMap.get(connectionId);
+		if (currentShardId == null) {
+			return false;
+		}
+
+		if (currentShardId == targetShardId) {
+			return true; // Already in correct shard
+		}
+
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> currentShard = shardedConnections.get(currentShardId);
+		if (currentShard == null) {
+			return false;
+		}
+
+		ServerConnectionHandler<T> handler = currentShard.get(connectionId);
+		if (handler == null) {
+			return false;
+		}
+
+		// Copy-then-remove pattern: add to new shard first
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> targetShard =
+			shardedConnections.computeIfAbsent(targetShardId, k -> new ConcurrentHashMap<>());
+		targetShard.put(connectionId, handler);
+
+		// Update reverse mapping
+		connectionShardMap.put(connectionId, targetShardId);
+
+		// Remove from old shard
+		currentShard.remove(connectionId);
+
+		Log.debug("Moved connection " + connectionId + " from shard " + currentShardId + " to shard " + targetShardId);
+
+		return true;
+	}
+
+	/**
+	 * Remove connection from its shard entirely.
+	 *
+	 * @param connectionId The connection ID to remove
+	 * @return The removed handler, or null if not found
+	 */
+	public ServerConnectionHandler<T> removeConnection(long connectionId) {
+		// Also remove from legacy connectionMap
+		connectionMap.remove(connectionId);
+
+		Integer shardId = connectionShardMap.remove(connectionId);
+		if (shardId == null) {
+			return null;
+		}
+
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.get(shardId);
+		if (shard == null) {
+			return null;
+		}
+
+		return shard.remove(connectionId);
+	}
+
+	/**
+	 * Get all connections in a specific shard for iteration.
+	 * Returns a direct reference to the shard map for performance-critical loops.
+	 *
+	 * @param shardId The shard ID
+	 * @return The shard's connection map (never null, may be empty)
+	 */
+	public ConcurrentHashMap<Long, ServerConnectionHandler<T>> getShardConnections(int shardId) {
+		return shardedConnections.computeIfAbsent(shardId, k -> new ConcurrentHashMap<>());
+	}
+
+	/**
+	 * Get a connection by ID from any shard.
+	 *
+	 * @param connectionId The connection ID
+	 * @return The connection handler, or null if not found
+	 */
+	public ServerConnectionHandler<T> getConnection(long connectionId) {
+		Integer shardId = connectionShardMap.get(connectionId);
+		if (shardId == null) {
+			return null;
+		}
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.get(shardId);
+		return shard != null ? shard.get(connectionId) : null;
+	}
+
+	/**
+	 * Get all shard IDs.
+	 */
+	public Set<Integer> getShardIds() {
+		return Collections.unmodifiableSet(shardedConnections.keySet());
+	}
+
+	/**
+	 * Get total connection count across all shards.
+	 */
+	public int getTotalConnectionCount() {
+		int count = 0;
+		for (ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard : shardedConnections.values()) {
+			count += shard.size();
+		}
+		return count;
+	}
+
+	/**
+	 * Get connection count for a specific shard.
+	 */
+	public int getShardConnectionCount(int shardId) {
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.get(shardId);
+		return shard != null ? shard.size() : 0;
+	}
+
+	/**
+	 * Broadcast to a specific shard.
+	 */
+	public void broadcastToShard(int shardId, Packet packet) {
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.get(shardId);
+		if (shard != null) {
+			shard.forEach((connId, handler) -> handler.sendTCP(packet));
+		}
+	}
+
+	/**
+	 * Broadcast to a specific shard with a condition.
+	 */
+	public void broadcastToShard(int shardId, Packet packet, Predicate<Connection<T>> condition) {
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.get(shardId);
+		if (shard != null) {
+			shard.forEach((connId, handler) -> {
+				if (condition.test(handler)) {
+					handler.sendTCP(packet);
+				}
+			});
+		}
 	}
 
 	/**
