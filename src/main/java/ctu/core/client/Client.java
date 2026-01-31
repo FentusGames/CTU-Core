@@ -140,6 +140,15 @@ public class Client<T> implements Runnable {
 		clazzes.put(key++, clazz);
 	}
 
+	public HashMap<Integer, Class<?>> getRegisteredPackets() {
+		return clazzes;
+	}
+
+	public void setRegisteredPackets(HashMap<Integer, Class<?>> packets) {
+		this.clazzes = new HashMap<>(packets);
+		this.key = packets.size();
+	}
+
 	@Override
 	public void run() {
 		// Create a new event loop group.
