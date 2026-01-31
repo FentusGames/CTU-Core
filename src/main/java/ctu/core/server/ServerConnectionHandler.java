@@ -71,12 +71,14 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 			return;
 		}
 
-		super.exceptionCaught(ctx, cause);
-
 		setInactive(true);
 
 		// Dispatch to listeners on their own threads (one thread per listener).
 		server.dispatchChannelExceptionCaught(this);
+
+		Log.debug("User disconnected (id: " + getConnectionID() + "): " + cause.getClass().getSimpleName());
+
+		ctx.close();
 	}
 
 	@Override

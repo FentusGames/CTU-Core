@@ -96,12 +96,11 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 			return;
 		}
 
-		super.exceptionCaught(ctx, cause);
+		setInactive(true);
 
 		listeners.forEach(listener -> listener.channelExceptionCaught(this));
 
-		Log.debug("Connection closed by server: " + cause);
-		cause.printStackTrace();
+		Log.debug("Connection lost (id: " + getConnectionID() + ")");
 
 		ctx.close();
 	}
