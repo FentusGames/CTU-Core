@@ -61,8 +61,13 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 		setInactive(true);
 
+		// Remove from server's connection tracking
+		server.removeConnection(getConnectionID());
+
 		// Dispatch to listeners on their own threads (one thread per listener).
 		server.dispatchChannelInactive(this);
+
+		Log.debug("Connection closed (id: " + getConnectionID() + ")");
 	}
 
 	@Override
@@ -73,10 +78,13 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 		setInactive(true);
 
+		// Remove from server's connection tracking
+		server.removeConnection(getConnectionID());
+
 		// Dispatch to listeners on their own threads (one thread per listener).
 		server.dispatchChannelExceptionCaught(this);
 
-		Log.debug("User disconnected (id: " + getConnectionID() + "): " + cause.getClass().getSimpleName());
+		Log.debug("Connection lost (id: " + getConnectionID() + "): " + cause.getClass().getSimpleName());
 
 		ctx.close();
 	}
