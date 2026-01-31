@@ -2,121 +2,112 @@ package ctu.core.logger;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
- * Lightweight debug logger with a hard runtime gate.
+ * Lightweight logger with configurable log levels.
  *
- * Debug logging is OFF by default. Enable with JVM args:
+ * Logging is OFF by default. Enable with JVM args:
  *
- * -Dctu.debug=true -Dctu.log.mute.words=word1,word2,word3 -Dctu.log.mute.packages=core.listeners,core.packets
+ * -Dctu.log.level=DEBUG
  *
- * When disabled: - No SLF4J lookup - No reflection - Zero runtime cost
+ * Log levels (from lowest to highest): TRACE, DEBUG, INFO, WARN, ERROR, OFF
  *
  * @author Fentus
  */
 public class Log {
+	public enum Level {
+		TRACE(0), DEBUG(1), INFO(2), WARN(3), ERROR(4), OFF(5);
+
+		private final int value;
+
+		Level(int value) {
+			this.value = value;
+		}
+
+		public int getValue() {
+			return value;
+		}
+	}
+
 	private static Object logger;
+	private static Method traceMethod;
+	private static Method debugMethod;
+	private static Method infoMethod;
+	private static Method warnMethod;
+	private static Method errorMethod;
 
-	private static final boolean DEBUG_ENABLED = Boolean.parseBoolean(System.getProperty("ctu.debug", "false"));
-
-	private static final Set<String> mutedWords = new CopyOnWriteArraySet<>();
-	private static final Set<String> mutedPackages = new CopyOnWriteArraySet<>();
+	private static final Level LOG_LEVEL;
+	private static final boolean LOGGING_ENABLED;
 
 	static {
-		if (DEBUG_ENABLED) {
+		String levelStr = System.getProperty("ctu.log.level", "OFF").toUpperCase();
+		Level parsedLevel;
+		
+		try {
+			parsedLevel = Level.valueOf(levelStr);
+		} catch (IllegalArgumentException e) {
+			parsedLevel = Level.OFF;
+		}
+		
+		LOG_LEVEL = parsedLevel;
+		LOGGING_ENABLED = LOG_LEVEL != Level.OFF;
+
+		if (LOGGING_ENABLED) {
 			try {
 				Class<?> loggerFactoryClass = Class.forName("org.slf4j.LoggerFactory");
 				Method getLoggerMethod = loggerFactoryClass.getMethod("getLogger", String.class);
-
 				logger = getLoggerMethod.invoke(null, Log.class.getName());
+
+				traceMethod = logger.getClass().getMethod("trace", String.class);
+				debugMethod = logger.getClass().getMethod("debug", String.class);
+				infoMethod = logger.getClass().getMethod("info", String.class);
+				warnMethod = logger.getClass().getMethod("warn", String.class);
+				errorMethod = logger.getClass().getMethod("error", String.class);
 			} catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
 				logger = null;
-			}
-
-			String words = System.getProperty("ctu.log.mute.words", "");
-			if (!words.isEmpty()) {
-				for (String word : words.split(",")) {
-					mutedWords.add(word.trim().toLowerCase());
-				}
-			}
-
-			String packages = System.getProperty("ctu.log.mute.packages", "");
-			if (!packages.isEmpty()) {
-				for (String pkg : packages.split(",")) {
-					mutedPackages.add(pkg.trim());
-				}
 			}
 		} else {
 			logger = null;
 		}
 	}
 
-	public static void muteWord(String word) {
-		mutedWords.add(word.toLowerCase());
+	public static Level getLevel() {
+		return LOG_LEVEL;
 	}
 
-	public static void unmuteWord(String word) {
-		mutedWords.remove(word.toLowerCase());
-	}
-
-	public static void mutePackage(String packageName) {
-		mutedPackages.add(packageName);
-	}
-
-	public static void unmutePackage(String packageName) {
-		mutedPackages.remove(packageName);
-	}
-
-	public static void clearMutes() {
-		mutedWords.clear();
-		mutedPackages.clear();
+	public static void trace(String message) {
+		log(Level.TRACE, traceMethod, message);
 	}
 
 	public static void debug(String message) {
-		if (!DEBUG_ENABLED || logger == null) {
+		log(Level.DEBUG, debugMethod, message);
+	}
+
+	public static void info(String message) {
+		log(Level.INFO, infoMethod, message);
+	}
+
+	public static void warn(String message) {
+		log(Level.WARN, warnMethod, message);
+	}
+
+	public static void error(String message) {
+		log(Level.ERROR, errorMethod, message);
+	}
+
+	private static void log(Level level, Method method, String message) {
+		if (!LOGGING_ENABLED || logger == null || method == null) {
 			return;
 		}
 
-		if (isMuted(message)) {
+		if (level.getValue() < LOG_LEVEL.getValue()) {
 			return;
 		}
 
 		try {
-			Method debugMethod = logger.getClass().getMethod("debug", String.class);
-
-			debugMethod.invoke(logger, message);
-		} catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+			method.invoke(logger, message);
+		} catch (IllegalAccessException | InvocationTargetException e) {
 			// ignore
 		}
-	}
-
-	private static boolean isMuted(String message) {
-		if (!mutedWords.isEmpty()) {
-			String lowerMessage = message.toLowerCase();
-
-			for (String word : mutedWords) {
-				if (lowerMessage.contains(word)) {
-					return true;
-				}
-			}
-		}
-
-		if (!mutedPackages.isEmpty()) {
-			StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-
-			if (stack.length > 3) {
-				String callerClass = stack[3].getClassName();
-
-				for (String pkg : mutedPackages) {
-					if (callerClass.startsWith(pkg)) {
-						return true;
-					}
-				}
-			}
-		}
-
-		return false;
 	}
 }

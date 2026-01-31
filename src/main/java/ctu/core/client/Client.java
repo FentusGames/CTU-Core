@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLException;
@@ -49,6 +50,7 @@ public class Client<T> implements Runnable {
 
 	private SslContext sslCtx;
 	private long ping = 0;
+	private String pingName = "";
 
 	private volatile ClientConnectionHandler<T> connectionHandler;
 	private HashMap<Integer, Class<?>> clazzes = new HashMap<>();
@@ -58,6 +60,8 @@ public class Client<T> implements Runnable {
 	private ChannelFuture future;
 
 	private CallbackConnect callbackConnect;
+
+	private ScheduledFuture<?> pingTask;
 
 	protected boolean connected = false;
 
@@ -98,11 +102,15 @@ public class Client<T> implements Runnable {
 		this.callbackConnect = callbackConnect;
 
 		executorService.execute(this);
-		executorService.scheduleAtFixedRate(new Runnable() {
+		pingTask = executorService.scheduleAtFixedRate(new Runnable() {
 			@Override
 			public void run() {
-				getClient().sendTCP(new PacketPing().withTime(Instant.now()));
-				Log.debug(String.format(String.format("Ping (M/S): %.2f", ping / 1_000_000.0F)));
+				if (connected) {
+					getClient().sendTCP(new PacketPing().withTime(Instant.now()));
+					if (pingName != null && !pingName.isEmpty()) {
+						Log.trace(String.format("[%s] Ping sent (M/S): %.2f", pingName, ping / 1_000_000.0F));
+					}
+				}
 			}
 		}, (int) (timeout * 0.8F), (int) (timeout * 0.8F), TimeUnit.SECONDS);
 	}
@@ -252,8 +260,18 @@ public class Client<T> implements Runnable {
 		this.ping = ping;
 	}
 
+	public void setPingName(String pingName) {
+		this.pingName = pingName;
+	}
+
 	public void close() {
 		connected = false;
+
+		// Cancel ping task first
+		if (pingTask != null) {
+			pingTask.cancel(false);
+			pingTask = null;
+		}
 
 		executorService.shutdown(); // initiate shutdown
 

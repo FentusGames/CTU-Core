@@ -87,7 +87,7 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 			listeners.forEach(listener -> listener.channelRead(this, packet));
 		}
 
-		Log.debug("Received TCP packet: " + packet.getClass().getName() + ", Size: " + size + " bytes. ");
+		Log.trace("Received TCP packet: " + packet.getClass().getName() + ", Size: " + size + " bytes. ");
 	}
 
 	@Override

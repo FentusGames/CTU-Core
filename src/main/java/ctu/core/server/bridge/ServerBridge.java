@@ -45,7 +45,7 @@ public class ServerBridge<T> {
 			return;
 		}
 
-		BridgeConnection<T> connection = new BridgeConnection<>(serverId, remoteConfig, packetClasses, connectionObjectSupplier.get(), timeout);
+		BridgeConnection<T> connection = new BridgeConnection<>(config.getServerId(), serverId, remoteConfig, packetClasses, connectionObjectSupplier.get(), timeout);
 
 		for (BridgeListener<T> listener : globalListeners) {
 			connection.addListener(listener);

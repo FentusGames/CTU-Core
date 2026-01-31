@@ -30,8 +30,10 @@ public class BridgeConnection<T> implements Listener<T> {
 
 	private final T connectionObject;
 	private final int timeout;
+	private final String localServerId;
 
-	public BridgeConnection(String remoteServerId, RemoteServerConfig remoteConfig, HashMap<Integer, Class<?>> packetClasses, T connectionObject, int timeout) {
+	public BridgeConnection(String localServerId, String remoteServerId, RemoteServerConfig remoteConfig, HashMap<Integer, Class<?>> packetClasses, T connectionObject, int timeout) {
+		this.localServerId = localServerId;
 		this.remoteServerId = remoteServerId;
 		this.remoteConfig = remoteConfig;
 		this.packetClasses = packetClasses;
@@ -47,6 +49,7 @@ public class BridgeConnection<T> implements Listener<T> {
 		Log.debug("BridgeConnection: Connecting to " + remoteServerId + " at " + remoteConfig.getHost() + ":" + remoteConfig.getPort());
 
 		client = new Client<>(remoteConfig.getHost(), remoteConfig.getPort(), timeout, connectionObject);
+		client.setPingName(localServerId + " -> " + remoteServerId);
 
 		for (var entry : packetClasses.entrySet()) {
 			client.register(entry.getValue());
@@ -63,7 +66,10 @@ public class BridgeConnection<T> implements Listener<T> {
 				} else {
 					Log.debug("BridgeConnection: Failed to connect to " + remoteServerId);
 					connected = false;
-					client = null;
+					if (client != null) {
+						client.close();
+						client = null;
+					}
 					scheduleReconnect();
 				}
 			}
@@ -126,6 +132,9 @@ public class BridgeConnection<T> implements Listener<T> {
 		reconnectFuture = reconnectScheduler.schedule(() -> {
 			if (shouldReconnect && !connected) {
 				Log.debug("BridgeConnection: Attempting reconnect to " + remoteServerId);
+				if (client != null) {
+					client.close();
+				}
 				client = null;
 				connect();
 			}
@@ -174,6 +183,10 @@ public class BridgeConnection<T> implements Listener<T> {
 	public void channelInactive(Connection<T> connection) {
 		Log.debug("BridgeConnection: Disconnected from " + remoteServerId);
 		connected = false;
+		if (client != null) {
+			client.close();
+			client = null;
+		}
 		notifyDisconnected();
 		scheduleReconnect();
 	}
@@ -182,12 +195,17 @@ public class BridgeConnection<T> implements Listener<T> {
 	public void channelExceptionCaught(Connection<T> connection) {
 		Log.debug("BridgeConnection: Exception with " + remoteServerId);
 		connected = false;
+		if (client != null) {
+			client.close();
+			client = null;
+		}
 		notifyDisconnected();
 		scheduleReconnect();
 	}
 
 	@Override
 	public void channelRead(Connection<T> connection, Packet packet) {
+		Log.trace(String.format("[%s <- %s] Received %s", localServerId, remoteServerId, packet.getClass().getSimpleName()));
 		notifyPacketReceived(packet);
 	}
 
