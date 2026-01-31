@@ -119,4 +119,18 @@ public class ServerBridge<T> {
 	public ServerConfig getConfig() {
 		return config;
 	}
+
+	public int getConnectedCount() {
+		int count = 0;
+		for (BridgeConnection<T> connection : connections.values()) {
+			if (connection.isConnected()) {
+				count++;
+			}
+		}
+		return count;
+	}
+
+	public int getTotalCount() {
+		return connections.size();
+	}
 }
