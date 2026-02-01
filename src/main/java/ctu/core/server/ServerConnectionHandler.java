@@ -80,7 +80,7 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 		// Note: Connection is NOT removed here - cleanup listener handles removal after grace period
 		server.dispatchChannelExceptionCaught(this);
 
-		Log.debug("Connection error (id: " + getConnectionID() + "): " + cause.getClass().getSimpleName());
+		Log.debug("Connection error (id: " + getConnectionID() + ")");
 
 		ctx.close();
 	}
