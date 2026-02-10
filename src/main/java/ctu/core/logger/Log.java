@@ -95,6 +95,33 @@ public class Log {
 		log(Level.ERROR, errorMethod, message);
 	}
 
+	public static void error(String message, Throwable throwable) {
+		error(message);
+		if (throwable != null) {
+			error(stackTraceToString(throwable));
+		}
+	}
+
+	public static void warn(String message, Throwable throwable) {
+		warn(message);
+		if (throwable != null) {
+			warn(stackTraceToString(throwable));
+		}
+	}
+
+	public static void debug(String message, Throwable throwable) {
+		debug(message);
+		if (throwable != null) {
+			debug(stackTraceToString(throwable));
+		}
+	}
+
+	private static String stackTraceToString(Throwable throwable) {
+		java.io.StringWriter sw = new java.io.StringWriter();
+		throwable.printStackTrace(new java.io.PrintWriter(sw));
+		return sw.toString();
+	}
+
 	private static void log(Level level, Method method, String message) {
 		if (!LOGGING_ENABLED || logger == null || method == null) {
 			return;

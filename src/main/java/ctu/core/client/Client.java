@@ -87,7 +87,7 @@ public class Client<T> implements Runnable {
 					.build();
 			// @formatter:on
 		} catch (SSLException e) {
-			e.printStackTrace();
+			Log.error("SSL context initialization failed", e);
 		}
 	}
 
@@ -289,7 +289,7 @@ public class Client<T> implements Runnable {
 				future.channel().close().sync();
 			}
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			Log.error("Channel close interrupted", e);
 		}
 	}
 

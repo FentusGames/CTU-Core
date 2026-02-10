@@ -424,8 +424,7 @@ public class Server<T> implements Runnable {
 				try {
 					action.run(nl);
 				} catch (Throwable t) {
-					Log.debug("Listener [" + nl.name + "] failed during " + opName + ": " + t.getMessage());
-					t.printStackTrace();
+					Log.error("Listener [" + nl.name + "] failed during " + opName, t);
 				}
 			});
 		}

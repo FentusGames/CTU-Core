@@ -29,8 +29,7 @@ public class NamedListener<T> {
 					}
 					Thread.currentThread().interrupt();
 				} catch (Throwable t) {
-					Log.debug("Listener worker [" + name + "] crashed: " + t.getMessage());
-					t.printStackTrace();
+					Log.error("Listener worker [" + name + "] crashed", t);
 				}
 			}
 		});

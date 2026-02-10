@@ -92,8 +92,9 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			packet = (Packet) clazz.getConstructor().newInstance();
 			packet.unmarshal(compression.decompress(Arrays.copyOfRange(bytes, 3, bytes.length)), 0);
 		} catch (final InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException | SecurityException | BufferUnderflowException e) {
-			e.printStackTrace();
+			Log.error("Packet instantiation/unmarshal error", e);
 		} catch (final InputMismatchException | IOException e) {
+			Log.debug("Packet parse error: " + e.getMessage());
 		}
 
 		return packet;
@@ -122,11 +123,13 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 					baos.write(tmp, 0, size);
 				}
 			} catch (Exception ex) {
+				Log.debug("Compression stream error: " + ex.getMessage());
 			} finally {
 				try {
 					if (baos != null)
 						baos.close();
 				} catch (Exception ex) {
+					Log.debug("Compression stream error: " + ex.getMessage());
 				}
 			}
 
@@ -150,11 +153,13 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 					baos.write(tmp, 0, size);
 				}
 			} catch (Exception ex) {
+				Log.debug("Compression stream error: " + ex.getMessage());
 			} finally {
 				try {
 					if (baos != null)
 						baos.close();
 				} catch (Exception ex) {
+					Log.debug("Compression stream error: " + ex.getMessage());
 				}
 			}
 
@@ -178,7 +183,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		try {
 			out = compression.compress(Arrays.copyOf(buf, packet.marshal(buf, 0)));
 		} catch (IOException e) {
-			e.printStackTrace();
+			Log.error("Packet compression error", e);
 		}
 
 		if (out.length >= 1500) {
