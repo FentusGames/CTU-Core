@@ -12,20 +12,12 @@ import ctu.core.abstracts.Packet;
  * @author     Fentus
  * @param  <T>
  */
-public abstract interface Listener<T> {
-	// This method is called when a connection is established and becomes active. It takes a "Connection" object as a
-	// parameter, which represents the connection that became active.
-	public abstract void channelActive(Connection<T> connection);
+public interface Listener<T> {
+	default void channelActive(Connection<T> connection) {}
 
-	// This method is called when a packet is received on the connection. It takes a "Connection" object and a "Packet"
-	// object as parameters, which represent the connection and the received packet, respectively.
-	public abstract void channelRead(Connection<T> connection, Packet packet);
+	void channelRead(Connection<T> connection, Packet packet);
 
-	// This method is called when a connection is closed and becomes inactive. It takes a "Connection" object as a
-	// parameter, which represents the connection that became inactive.
-	public abstract void channelInactive(Connection<T> connection);
+	void channelInactive(Connection<T> connection);
 
-	// This method is called when an exception is thrown during any of the above methods. It takes a "Connection" object
-	// as a parameter, which represents the connection on which the exception occurred.
-	public abstract void channelExceptionCaught(Connection<T> connection);
+	default void channelExceptionCaught(Connection<T> connection) {}
 }

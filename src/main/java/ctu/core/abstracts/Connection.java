@@ -125,6 +125,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			} catch (Exception ex) {
 				Log.debug("Compression stream error: " + ex.getMessage());
 			} finally {
+				dfl.end();
 				try {
 					if (baos != null)
 						baos.close();
@@ -155,6 +156,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			} catch (Exception ex) {
 				Log.debug("Compression stream error: " + ex.getMessage());
 			} finally {
+				iflr.end();
 				try {
 					if (baos != null)
 						baos.close();
@@ -186,6 +188,10 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			Log.error("Packet compression error", e);
 		}
 
+		if (out == null) {
+			return null;
+		}
+
 		if (out.length >= 1500) {
 			Log.debug("Packets should not exceed 1500 bytes after compression.");
 		}
@@ -206,11 +212,21 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 
 		byte[] header = new byte[3];
 
-		int key = clazzesStringInteger.get(packet.getClass().getSimpleName());
+		Integer key = clazzesStringInteger.get(packet.getClass().getSimpleName());
 
-		System.arraycopy(new byte[] { (byte) key }, 0, header, 2, 1);
+		if (key == null) {
+			Log.debug("Cannot send unregistered packet: " + packet.getClass().getSimpleName());
+			return;
+		}
+
+		System.arraycopy(new byte[] { (byte) (int) key }, 0, header, 2, 1);
 
 		byte[] data = packetToBytes(compression, packet);
+
+		if (data == null) {
+			Log.debug("Failed to serialize packet: " + packet.getClass().getSimpleName());
+			return;
+		}
 
 		System.arraycopy(new byte[] { (byte) (data.length >>> 8), (byte) data.length }, 0, header, 0, 2);
 
