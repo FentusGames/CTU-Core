@@ -1,8 +1,7 @@
 package ctu.core.server.config;
 
 public enum ServerType {
-	LOBBY(0),
-	GAME(1);
+	LOBBY(0), GAME(1);
 
 	private final int value;
 

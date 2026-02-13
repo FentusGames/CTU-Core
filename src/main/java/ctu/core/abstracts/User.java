@@ -10,5 +10,5 @@ package ctu.core.abstracts;
  * @param  <T>
  */
 public class User<T> {
-	
+
 }

@@ -13,11 +13,13 @@ import ctu.core.abstracts.Packet;
  * @param  <T>
  */
 public interface Listener<T> {
-	default void channelActive(Connection<T> connection) {}
+	default void channelActive(Connection<T> connection) {
+	}
 
 	void channelRead(Connection<T> connection, Packet packet);
 
 	void channelInactive(Connection<T> connection);
 
-	default void channelExceptionCaught(Connection<T> connection) {}
+	default void channelExceptionCaught(Connection<T> connection) {
+	}
 }

@@ -42,13 +42,13 @@ public class Log {
 	static {
 		String levelStr = System.getProperty("ctu.log.level", "OFF").toUpperCase();
 		Level parsedLevel;
-		
+
 		try {
 			parsedLevel = Level.valueOf(levelStr);
 		} catch (IllegalArgumentException e) {
 			parsedLevel = Level.OFF;
 		}
-		
+
 		LOG_LEVEL = parsedLevel;
 		LOGGING_ENABLED = LOG_LEVEL != Level.OFF;
 

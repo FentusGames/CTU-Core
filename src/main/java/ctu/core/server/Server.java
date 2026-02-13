@@ -194,8 +194,7 @@ public class Server<T> implements Runnable {
 	 * Called during channelActive().
 	 */
 	void addConnectionToShard(long connectionId, ServerConnectionHandler<T> handler, int shardId) {
-		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard =
-			shardedConnections.computeIfAbsent(shardId, k -> new ConcurrentHashMap<>());
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.computeIfAbsent(shardId, k -> new ConcurrentHashMap<>());
 		shard.put(connectionId, handler);
 		connectionShardMap.put(connectionId, shardId);
 	}
@@ -242,8 +241,7 @@ public class Server<T> implements Runnable {
 		}
 
 		// Copy-then-remove pattern: add to new shard first
-		ConcurrentHashMap<Long, ServerConnectionHandler<T>> targetShard =
-			shardedConnections.computeIfAbsent(targetShardId, k -> new ConcurrentHashMap<>());
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> targetShard = shardedConnections.computeIfAbsent(targetShardId, k -> new ConcurrentHashMap<>());
 		targetShard.put(connectionId, handler);
 
 		// Update reverse mapping
