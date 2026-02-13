@@ -7,7 +7,10 @@ import java.nio.BufferUnderflowException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.InputMismatchException;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
@@ -36,6 +39,11 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	// This field is a list of acceptable classes that the Connection class can check against when handling packets.
 	private HashMap<Integer, Class<?>> clazzesIntegerClazz = new HashMap<>();
 	private HashMap<String, Integer> clazzesStringInteger = new HashMap<>();
+
+	// Bandwidth tracking per packet type: packetName -> [count, totalBytes]
+	private final ConcurrentHashMap<String, long[]> packetBytesSent = new ConcurrentHashMap<>();
+	private final AtomicLong totalBytesSent = new AtomicLong();
+	private final AtomicLong totalBytesReceived = new AtomicLong();
 
 	// This field is an instance of the ChannelHandlerContext class that represents the context of the Netty channel.
 	// It is used to send packets to the remote address.
@@ -238,6 +246,13 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		String packetName = packet.getClass().getSimpleName();
 		int size = bytes.length;
 
+		// Track bandwidth per packet type
+		packetBytesSent.computeIfAbsent(packetName, k -> new long[2]);
+		long[] stats = packetBytesSent.get(packetName);
+		stats[0]++;
+		stats[1] += size;
+		totalBytesSent.addAndGet(size);
+
 		if (ctx == null) {
 			Log.debug("TCP send failed (not connected) - Packet: " + packetName + ", Size: " + size + " bytes.");
 		} else {
@@ -306,5 +321,21 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 
 	public void remove(Server<T> server) {
 		server.removeConnection(connectionID);
+	}
+
+	public Map<String, long[]> getPacketBytesSent() {
+		return packetBytesSent;
+	}
+
+	public long getTotalBytesSent() {
+		return totalBytesSent.get();
+	}
+
+	public long getTotalBytesReceived() {
+		return totalBytesReceived.get();
+	}
+
+	protected void addBytesReceived(int size) {
+		totalBytesReceived.addAndGet(size);
 	}
 }

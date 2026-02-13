@@ -95,6 +95,9 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 		int size = byteBuf.readableBytes();
 
+		// Track received bandwidth
+		addBytesReceived(size);
+
 		byte[] bytes = new byte[size];
 		byteBuf.readBytes(bytes);
 
