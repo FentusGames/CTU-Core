@@ -13,8 +13,9 @@ public class ServerConfig {
 	private Long systemRangeStart;
 	private Long systemRangeEnd;
 	private Map<String, RemoteServerConfig> servers = new HashMap<>();
-	private String transferTokenSecret = "change-me";
+	private String transferTokenSecret;
 	private int transferTokenExpirySeconds = 30;
+	private int debugPort = 0;
 	private String databaseUrl;
 	private String databaseUsername;
 	private String databasePassword;
@@ -160,6 +161,14 @@ public class ServerConfig {
 
 	public boolean isGame() {
 		return serverType == ServerType.GAME;
+	}
+
+	public int getDebugPort() {
+		return debugPort;
+	}
+
+	public void setDebugPort(int debugPort) {
+		this.debugPort = debugPort;
 	}
 
 	public String getDatabaseUrl() {
