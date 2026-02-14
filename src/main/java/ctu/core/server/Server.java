@@ -209,6 +209,9 @@ public class Server<T> implements Runnable {
 	 */
 	public boolean assignConnectionToShard(long connectionId, long systemId) {
 		int targetShardId = getShardForSystem(systemId);
+		if (targetShardId == UNASSIGNED_SHARD) {
+			Log.warn("assignConnectionToShard: System " + systemId + " has no shard mapping (UNASSIGNED). systemToShardMap size=" + systemToShardMap.size());
+		}
 		return moveConnectionToShard(connectionId, targetShardId);
 	}
 
