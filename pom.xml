@@ -7,8 +7,8 @@
 	<description>CTU-Core is a Netty-based Java client-server application that facilitates communication between clients and servers with advanced encryption methods such as SSL, TLS, compression, and other features.</description>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<maven.compiler.source>17</maven.compiler.source>
-		<maven.compiler.target>17</maven.compiler.target>
+		<maven.compiler.source>25</maven.compiler.source>
+		<maven.compiler.target>25</maven.compiler.target>
 		<lwjgl.version>3.2.2</lwjgl.version>
 		<junit.version>5.4.2</junit.version>
 	</properties>

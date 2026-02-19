@@ -114,66 +114,40 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	private Compression compression = new Compression() {
 		@Override
 		public byte[] compress(byte[] bytes) throws IOException {
-			ByteArrayOutputStream baos = null;
-			Deflater dfl = new Deflater();
+			try (Deflater dfl = new Deflater()) {
+				dfl.setLevel(Deflater.BEST_SPEED);
+				dfl.setInput(bytes);
+				dfl.finish();
 
-			dfl.setLevel(Deflater.BEST_SPEED); // TODO: Evaluate this.
-			dfl.setInput(bytes);
-			dfl.finish();
+				ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				byte[] tmp = new byte[4 * 1024];
 
-			baos = new ByteArrayOutputStream();
-
-			byte[] tmp = new byte[4 * 1024];
-
-			try {
 				while (!dfl.finished()) {
 					int size = dfl.deflate(tmp);
 					baos.write(tmp, 0, size);
 				}
-			} catch (Exception ex) {
-				Log.debug("Compression stream error: " + ex.getMessage());
-			} finally {
-				dfl.end();
-				try {
-					if (baos != null)
-						baos.close();
-				} catch (Exception ex) {
-					Log.debug("Compression stream error: " + ex.getMessage());
-				}
-			}
 
-			return baos.toByteArray();
+				return baos.toByteArray();
+			}
 		}
 
 		@Override
 		public byte[] decompress(byte[] bytes) throws IOException {
-			ByteArrayOutputStream baos = null;
-			Inflater iflr = new Inflater();
+			try (Inflater iflr = new Inflater()) {
+				iflr.setInput(bytes);
 
-			iflr.setInput(bytes);
+				ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				byte[] tmp = new byte[4 * 1024];
 
-			baos = new ByteArrayOutputStream();
-
-			byte[] tmp = new byte[4 * 1024];
-
-			try {
 				while (!iflr.finished()) {
 					int size = iflr.inflate(tmp);
 					baos.write(tmp, 0, size);
 				}
-			} catch (Exception ex) {
-				Log.debug("Compression stream error: " + ex.getMessage());
-			} finally {
-				iflr.end();
-				try {
-					if (baos != null)
-						baos.close();
-				} catch (Exception ex) {
-					Log.debug("Compression stream error: " + ex.getMessage());
-				}
-			}
 
-			return baos.toByteArray();
+				return baos.toByteArray();
+			} catch (Exception ex) {
+				throw new IOException("Decompression error", ex);
+			}
 		}
 	};
 
@@ -247,7 +221,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		int size = bytes.length;
 
 		// Track bandwidth per packet type
-		packetBytesSent.computeIfAbsent(packetName, k -> new long[2]);
+		packetBytesSent.computeIfAbsent(packetName, _ -> new long[2]);
 		long[] stats = packetBytesSent.get(packetName);
 		stats[0]++;
 		stats[1] += size;

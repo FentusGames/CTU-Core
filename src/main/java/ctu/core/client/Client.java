@@ -24,6 +24,9 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLParameters;
+
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
@@ -174,7 +177,13 @@ public class Client<T> implements Runnable {
 					ChannelPipeline pipeline = ch.pipeline();
 
 					// Add the SSL handler to the pipeline.
-					pipeline.addLast(sslCtx.newHandler(ch.alloc(), host, port));
+					// Disable hostname verification since we pin the server certificate directly.
+					SslHandler sslHandler = sslCtx.newHandler(ch.alloc(), host, port);
+					SSLEngine engine = sslHandler.engine();
+					SSLParameters params = engine.getSSLParameters();
+					params.setEndpointIdentificationAlgorithm("");
+					engine.setSSLParameters(params);
+					pipeline.addLast(sslHandler);
 
 					// Add a basic timeout if the client has not sent or received information in
 					// past X seconds.
