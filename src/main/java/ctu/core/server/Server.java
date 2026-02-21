@@ -446,7 +446,17 @@ public class Server<T> implements Runnable {
 					ChannelPipeline pipeline = ch.pipeline();
 
 					// TLS
-					pipeline.addLast(sslCtx.newHandler(ch.alloc()));
+					SslHandler sslHandler = sslCtx.newHandler(ch.alloc());
+					pipeline.addLast(sslHandler);
+
+					// Log TLS handshake result
+					sslHandler.handshakeFuture().addListener(hsFuture -> {
+						if (hsFuture.isSuccess()) {
+							Log.debug("Server TLS handshake succeeded for " + ch.remoteAddress());
+						} else {
+							Log.error("Server TLS handshake FAILED for " + ch.remoteAddress(), hsFuture.cause());
+						}
+					});
 
 					// Timeouts
 					pipeline.addLast(new ReadTimeoutHandler(timeout));
@@ -466,17 +476,7 @@ public class Server<T> implements Runnable {
 					pipeline.addLast(connectionHandler);
 
 					// Confirm SSL is present or close.
-					pipeline.addLast(new ChannelInboundHandlerAdapter() {
-						@Override
-						public void channelActive(ChannelHandlerContext ctx) throws Exception {
-							if (ctx.pipeline().get(SslHandler.class) != null) {
-								Log.debug("Both client and server have SSL/TLS enabled");
-							} else {
-								Log.debug("Either client or server does not have SSL/TLS enabled, disconnecting both.");
-								ctx.close();
-							}
-						}
-					});
+					pipeline.addLast(new SslVerificationHandler());
 				}
 			});
 
@@ -494,6 +494,21 @@ public class Server<T> implements Runnable {
 
 			workerGroup.shutdownGracefully();
 			bossGroup.shutdownGracefully();
+		}
+	}
+
+	/**
+	 * Verifies SSL/TLS is present on incoming connections.
+	 */
+	static class SslVerificationHandler extends ChannelInboundHandlerAdapter {
+		@Override
+		public void channelActive(ChannelHandlerContext ctx) throws Exception {
+			if (ctx.pipeline().get(SslHandler.class) != null) {
+				Log.debug("Both client and server have SSL/TLS enabled");
+			} else {
+				Log.debug("Either client or server does not have SSL/TLS enabled, disconnecting both.");
+				ctx.close();
+			}
 		}
 	}
 }

@@ -11,6 +11,7 @@ import ctu.core.logger.Log;
 import ctu.core.packets.PacketPing;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.ssl.SslHandler;
 
 /**
  * @author Fentus
@@ -20,6 +21,7 @@ import io.netty.channel.ChannelHandlerContext;
 public class ClientConnectionHandler<T> extends Connection<T> {
 	private CopyOnWriteArrayList<Listener<T>> listeners = new CopyOnWriteArrayList<>();
 	private Client<T> client;
+	private volatile boolean tlsReady = false;
 
 	/**
 	 * Constructs a new ClientConnectionHandler with a given client, userID, and connectionObject.
@@ -40,9 +42,23 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 
 		super.channelActive(ctx);
 
-		listeners.forEach(listener -> listener.channelActive(this));
+		// Wait for TLS handshake before notifying listeners
+		SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
+		if (sslHandler != null) {
+			sslHandler.handshakeFuture().addListener(future -> {
+				if (future.isSuccess()) {
+					onTlsReady();
+				}
+			});
+		} else {
+			onTlsReady();
+		}
+	}
 
-		Log.debug("Client connected to server");
+	private void onTlsReady() {
+		tlsReady = true;
+		listeners.forEach(listener -> listener.channelActive(this));
+		Log.debug("Client connected to server (TLS ready)");
 	}
 
 	@Override
@@ -54,6 +70,7 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 		super.channelInactive(ctx);
 
 		setInactive(true);
+		tlsReady = false;
 
 		listeners.forEach(listener -> listener.channelInactive(this));
 
@@ -111,6 +128,12 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 		}
 
 		listeners.add(listener);
+
+		// If TLS already completed, fire channelActive immediately for this listener.
+		// If TLS is still in progress, onTlsReady will notify all listeners in the list.
+		if (tlsReady) {
+			listener.channelActive(this);
+		}
 	}
 
 	public void removeListener(Listener<T> listener) {

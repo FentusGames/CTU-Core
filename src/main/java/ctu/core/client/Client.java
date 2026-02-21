@@ -8,8 +8,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import javax.net.ssl.SSLException;
-
 import ctu.core.abstracts.Packet;
 import ctu.core.callbacks.CallbackConnect;
 import ctu.core.interfaces.Listener;
@@ -89,8 +87,8 @@ public class Client<T> implements Runnable {
 					.trustManager(new File("server.crt"))
 					.build();
 			// @formatter:on
-		} catch (SSLException e) {
-			Log.error("SSL context initialization failed", e);
+		} catch (Throwable e) {
+			Log.error("SSL context initialization failed for " + host + ":" + port, e);
 		}
 	}
 
@@ -104,7 +102,21 @@ public class Client<T> implements Runnable {
 	public void start(CallbackConnect callbackConnect) {
 		this.callbackConnect = callbackConnect;
 
-		executorService.execute(this);
+		executorService.execute(() -> {
+			try {
+				run();
+			} catch (Throwable t) {
+				Log.error("Client connection thread failed: " + host + ":" + port, t);
+				connected = false;
+				if (callbackConnect != null) {
+					try {
+						callbackConnect.execute(false);
+					} catch (Throwable cb) {
+						Log.error("Client callback failed", cb);
+					}
+				}
+			}
+		});
 		pingTask = executorService.scheduleAtFixedRate(new Runnable() {
 			@Override
 			public void run() {
@@ -162,6 +174,10 @@ public class Client<T> implements Runnable {
 
 	@Override
 	public void run() {
+		if (sslCtx == null) {
+			throw new IllegalStateException("SSL context is null - SSL initialization failed for " + host + ":" + port);
+		}
+
 		// Create a new event loop group.
 		NioEventLoopGroup group = new NioEventLoopGroup();
 
@@ -198,28 +214,18 @@ public class Client<T> implements Runnable {
 					// Add the connection handler to the pipeline.
 					pipeline.addLast(connectionHandler);
 
-					// Add a channel inbound handler adapter to the pipeline.
-					pipeline.addLast(new ChannelInboundHandlerAdapter() {
-						@Override
-						public void channelActive(ChannelHandlerContext ctx) throws Exception {
-							// Check if both the client and server have SSL/TLS enabled.
-							if (ctx.pipeline().get(SslHandler.class) != null) {
-								Log.debug("Both client and server have SSL/TLS enabled");
-							} else {
-								Log.debug("Either client or server does not have SSL/TLS enabled, disconnecting both.");
-								// Close the channel if SSL/TLS is not enabled.
-								ctx.close();
-							}
+					// Log TLS handshake result
+					sslHandler.handshakeFuture().addListener(hsFuture -> {
+						if (hsFuture.isSuccess()) {
+							Log.debug("Client TLS handshake succeeded for " + host + ":" + port);
+						} else {
+							Log.error("Client TLS handshake FAILED for " + host + ":" + port, hsFuture.cause());
 						}
 					});
 
-					pipeline.addLast(new ChannelInboundHandlerAdapter() {
-						@Override
-						public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-							connected = false;
-							super.channelInactive(ctx);
-						}
-					});
+					// Add SSL verification and disconnect tracking handlers.
+					pipeline.addLast(new SslVerificationHandler());
+					pipeline.addLast(new DisconnectTracker(Client.this));
 				}
 			});
 
@@ -308,5 +314,37 @@ public class Client<T> implements Runnable {
 
 	public boolean isConnected() {
 		return connected && future != null && future.channel().isActive();
+	}
+
+	/**
+	 * Verifies SSL/TLS is present on the connection.
+	 */
+	static class SslVerificationHandler extends ChannelInboundHandlerAdapter {
+		@Override
+		public void channelActive(ChannelHandlerContext ctx) throws Exception {
+			if (ctx.pipeline().get(SslHandler.class) != null) {
+				Log.debug("Both client and server have SSL/TLS enabled");
+			} else {
+				Log.debug("Either client or server does not have SSL/TLS enabled, disconnecting both.");
+				ctx.close();
+			}
+		}
+	}
+
+	/**
+	 * Tracks disconnection by setting the Client's connected flag.
+	 */
+	static class DisconnectTracker extends ChannelInboundHandlerAdapter {
+		private final Client<?> client;
+
+		DisconnectTracker(Client<?> client) {
+			this.client = client;
+		}
+
+		@Override
+		public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+			client.connected = false;
+			super.channelInactive(ctx);
+		}
 	}
 }
