@@ -431,6 +431,32 @@ public class Server<T> implements Runnable {
 		}
 	}
 
+	private static String describeTlsFailure(Throwable cause) {
+		if (cause == null) {
+			return "Unknown error";
+		}
+
+		String msg = cause.getMessage();
+
+		if (msg != null && msg.contains("SslHandler removed before handshake completed")) {
+			return "Client disconnected before TLS handshake completed (client may have dropped the connection)";
+		}
+
+		if (cause instanceof java.security.cert.CertificateException || (msg != null && msg.contains("certificate"))) {
+			return "Certificate error - server.crt or server.key may be invalid or expired";
+		}
+
+		if (cause instanceof javax.net.ssl.SSLHandshakeException) {
+			return "TLS handshake rejected - " + msg;
+		}
+
+		if (cause instanceof java.nio.channels.ClosedChannelException) {
+			return "Client closed connection during TLS handshake";
+		}
+
+		return cause.getClass().getSimpleName() + ": " + msg;
+	}
+
 	/*
 	 * ========================= Netty bootstrap =========================
 	 */
@@ -446,7 +472,20 @@ public class Server<T> implements Runnable {
 					ChannelPipeline pipeline = ch.pipeline();
 
 					// TLS
-					pipeline.addLast(sslCtx.newHandler(ch.alloc()));
+					SslHandler sslHandler = sslCtx.newHandler(ch.alloc());
+					pipeline.addLast(sslHandler);
+
+					// Log TLS handshake result with a clear message
+					String remoteAddr = ch.remoteAddress().toString();
+					sslHandler.handshakeFuture().addListener(future -> {
+						if (future.isSuccess()) {
+							Log.debug("Server TLS handshake succeeded for " + remoteAddr);
+						} else {
+							Throwable cause = future.cause();
+							String reason = describeTlsFailure(cause);
+							Log.error("Server TLS handshake FAILED for " + remoteAddr + " - " + reason);
+						}
+					});
 
 					// Timeouts
 					pipeline.addLast(new ReadTimeoutHandler(timeout));

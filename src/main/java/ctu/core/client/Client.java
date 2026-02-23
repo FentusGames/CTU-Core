@@ -185,6 +185,17 @@ public class Client<T> implements Runnable {
 					engine.setSSLParameters(params);
 					pipeline.addLast(sslHandler);
 
+					// Log TLS handshake result with a clear message
+					sslHandler.handshakeFuture().addListener(future -> {
+						if (future.isSuccess()) {
+							Log.debug("Client TLS handshake succeeded for " + host + ":" + port);
+						} else {
+							Throwable cause = future.cause();
+							String reason = describeTlsFailure(cause);
+							Log.error("Client TLS handshake FAILED for " + host + ":" + port + " - " + reason);
+						}
+					});
+
 					// Add a basic timeout if the client has not sent or received information in
 					// past X seconds.
 					ch.pipeline().addLast(new ReadTimeoutHandler(timeout)).addLast(new WriteTimeoutHandler(timeout));
@@ -308,5 +319,35 @@ public class Client<T> implements Runnable {
 
 	public boolean isConnected() {
 		return connected && future != null && future.channel().isActive();
+	}
+
+	private static String describeTlsFailure(Throwable cause) {
+		if (cause == null) {
+			return "Unknown error";
+		}
+
+		String msg = cause.getMessage();
+
+		if (msg != null && msg.contains("SslHandler removed before handshake completed")) {
+			return "Connection closed before TLS handshake completed (server may not be ready yet)";
+		}
+
+		if (cause instanceof java.security.cert.CertificateException || (msg != null && msg.contains("certificate"))) {
+			return "Certificate error - server.crt may be invalid, expired, or mismatched";
+		}
+
+		if (cause instanceof java.net.ConnectException || (msg != null && msg.contains("Connection refused"))) {
+			return "Connection refused - server is not running or port is wrong";
+		}
+
+		if (cause instanceof javax.net.ssl.SSLHandshakeException) {
+			return "TLS handshake rejected - " + msg;
+		}
+
+		if (cause instanceof java.nio.channels.ClosedChannelException) {
+			return "Connection closed unexpectedly during TLS handshake";
+		}
+
+		return cause.getClass().getSimpleName() + ": " + msg;
 	}
 }
