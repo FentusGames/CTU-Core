@@ -431,6 +431,14 @@ public class Server<T> implements Runnable {
 		}
 	}
 
+	private static boolean isExpectedConnectionFailure(Throwable cause) {
+		if (cause == null) return false;
+		String msg = cause.getMessage();
+		if (msg != null && (msg.contains("SslHandler removed") || msg.contains("Connection refused"))) return true;
+		if (cause instanceof java.nio.channels.ClosedChannelException) return true;
+		return false;
+	}
+
 	private static String describeTlsFailure(Throwable cause) {
 		if (cause == null) {
 			return "Unknown error";
@@ -479,11 +487,15 @@ public class Server<T> implements Runnable {
 					String remoteAddr = ch.remoteAddress().toString();
 					sslHandler.handshakeFuture().addListener(future -> {
 						if (future.isSuccess()) {
-							Log.debug("Server TLS handshake succeeded for " + remoteAddr);
+							Log.debug("TLS OK: " + remoteAddr);
 						} else {
 							Throwable cause = future.cause();
 							String reason = describeTlsFailure(cause);
-							Log.error("Server TLS handshake FAILED for " + remoteAddr + " - " + reason);
+							if (isExpectedConnectionFailure(cause)) {
+								Log.debug("TLS: " + remoteAddr + " - " + reason);
+							} else {
+								Log.error("TLS: " + remoteAddr + " - " + reason);
+							}
 						}
 					});
 

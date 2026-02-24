@@ -188,11 +188,15 @@ public class Client<T> implements Runnable {
 					// Log TLS handshake result with a clear message
 					sslHandler.handshakeFuture().addListener(future -> {
 						if (future.isSuccess()) {
-							Log.debug("Client TLS handshake succeeded for " + host + ":" + port);
+							Log.debug("TLS OK: " + host + ":" + port);
 						} else {
 							Throwable cause = future.cause();
 							String reason = describeTlsFailure(cause);
-							Log.error("Client TLS handshake FAILED for " + host + ":" + port + " - " + reason);
+							if (isExpectedConnectionFailure(cause)) {
+								Log.debug("TLS: " + host + ":" + port + " - " + reason);
+							} else {
+								Log.error("TLS: " + host + ":" + port + " - " + reason);
+							}
 						}
 					});
 
@@ -244,9 +248,9 @@ public class Client<T> implements Runnable {
 					connected = future.isSuccess();
 
 					if (connected) {
-						Log.debug("Connection success");
+						Log.trace("Connection success");
 					} else {
-						Log.debug("Connection failed");
+						Log.trace("Connection failed");
 					}
 
 					if (callbackConnect != null) {
@@ -319,6 +323,14 @@ public class Client<T> implements Runnable {
 
 	public boolean isConnected() {
 		return connected && future != null && future.channel().isActive();
+	}
+
+	private static boolean isExpectedConnectionFailure(Throwable cause) {
+		if (cause == null) return false;
+		String msg = cause.getMessage();
+		if (msg != null && (msg.contains("SslHandler removed") || msg.contains("Connection refused"))) return true;
+		if (cause instanceof java.nio.channels.ClosedChannelException) return true;
+		return false;
 	}
 
 	private static String describeTlsFailure(Throwable cause) {
