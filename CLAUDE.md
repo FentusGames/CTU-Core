@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Always use str_replace for editing. Do not output the full file if only one function changes.
+
 repo:
   path: "C:\\Users\\Fentus\\git\\CTU-Core"
   type: "git+maven+java"
