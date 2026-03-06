@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Always use str_replace for editing. Do not output the full file if only one function changes.
+Always use string replace for editing. Do not output a full new file.
 
 repo:
   path: "C:\\Users\\Fentus\\git\\CTU-Core"
