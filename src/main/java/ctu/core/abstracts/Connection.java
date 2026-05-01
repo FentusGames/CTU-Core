@@ -159,9 +159,28 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	 * @param  compression
 	 * @return
 	 */
-	public byte[] packetToBytes(Compression compression, Packet packet) {
-		byte[] buf = new byte[4096];
+	/** Default marshal buffer size used when callers don't explicitly configure one. */
+	public static final int DEFAULT_MARSHAL_BUFFER_SIZE = 4096;
 
+	private int marshalBufferSize = DEFAULT_MARSHAL_BUFFER_SIZE;
+
+	/**
+	 * Configure the per-packet marshal buffer size. Must be ≥ the largest expected
+	 * marshalled packet size (i.e. ≥ the largest packet type's colferSizeMax). The default
+	 * (4 KiB) suits small packets; raise it on Client/Server when batching large bundled
+	 * packets like PacketPositionBatch with raised colferSizeMax.
+	 */
+	public void setMarshalBufferSize(int size) {
+		if (size > 0) this.marshalBufferSize = size;
+	}
+
+	public int getMarshalBufferSize() {
+		return marshalBufferSize;
+	}
+
+	public byte[] packetToBytes(Compression compression, Packet packet) {
+		// Sized via {@link #setMarshalBufferSize}; configured per-Client/Server at construction time.
+		byte[] buf = new byte[marshalBufferSize];
 		byte[] out = null;
 
 		try {

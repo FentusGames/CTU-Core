@@ -67,6 +67,7 @@ public class Server<T> implements Runnable {
 	private final int port;
 	private final int timeout;
 	private final Supplier<T> connectionObjectSupplier;
+	private final int marshalBufferSize;
 
 	private SslContext sslCtx;
 
@@ -90,9 +91,20 @@ public class Server<T> implements Runnable {
 	 * @param connectionObjectSupplier supplier to create new non-null connection objects for each connection
 	 */
 	public Server(int port, int timeout, Supplier<T> connectionObjectSupplier) {
+		this(port, timeout, connectionObjectSupplier, ctu.core.abstracts.Connection.DEFAULT_MARSHAL_BUFFER_SIZE);
+	}
+
+	/**
+	 * Constructs a new Server with an explicit marshal buffer size for outbound packets.
+	 * Must be ≥ the largest expected marshalled packet size (i.e. ≥ the largest packet type's
+	 * colferSizeMax). Set this when sending bundled batches (e.g. PacketPositionBatch with
+	 * a raised colferSizeMax of 16384).
+	 */
+	public Server(int port, int timeout, Supplier<T> connectionObjectSupplier, int marshalBufferSize) {
 		this.port = port;
 		this.timeout = timeout;
 		this.connectionObjectSupplier = connectionObjectSupplier;
+		this.marshalBufferSize = marshalBufferSize;
 
 		try {
 			// @formatter:off
@@ -511,6 +523,7 @@ public class Server<T> implements Runnable {
 
 					// Handler
 					ServerConnectionHandler<T> connectionHandler = new ServerConnectionHandler<>(getServer(), connectionObject);
+					connectionHandler.setMarshalBufferSize(marshalBufferSize);
 
 					connectionHandler.setClazzes(clazzes);
 

@@ -50,6 +50,7 @@ public class Client<T> implements Runnable {
 	private final int port;
 	private int timeout;
 	private final T connectionObject;
+	private final int marshalBufferSize;
 
 	private SslContext sslCtx;
 	private long ping = 0;
@@ -75,10 +76,21 @@ public class Client<T> implements Runnable {
 	 * @param port The port number to connect to.
 	 */
 	public Client(String host, int port, int timeout, T connectionObject) {
+		this(host, port, timeout, connectionObject, ctu.core.abstracts.Connection.DEFAULT_MARSHAL_BUFFER_SIZE);
+	}
+
+	/**
+	 * Constructs a new Client with an explicit marshal buffer size for outbound packets.
+	 * Must be ≥ the largest expected marshalled packet size on the wire (i.e. ≥ the largest
+	 * packet type's colferSizeMax). Bigger buffers cost a few KiB of allocation per packet
+	 * sent; smaller is fine for clients that never send big batches.
+	 */
+	public Client(String host, int port, int timeout, T connectionObject, int marshalBufferSize) {
 		this.host = host;
 		this.port = port;
 		this.timeout = timeout;
 		this.connectionObject = connectionObject;
+		this.marshalBufferSize = marshalBufferSize;
 
 		try {
 			// @formatter:off
@@ -206,6 +218,7 @@ public class Client<T> implements Runnable {
 
 					// Assign new instance
 					connectionHandler = new ClientConnectionHandler<>(Client.this, connectionObject);
+					connectionHandler.setMarshalBufferSize(marshalBufferSize);
 
 					// Set the classes for the connection handler.
 					connectionHandler.setClazzes(clazzes);
