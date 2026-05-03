@@ -75,6 +75,18 @@ public class Log {
 		return LOG_LEVEL;
 	}
 
+	/**
+	 * Cheap check to avoid building expensive log-message strings when the level is gated off.
+	 * Use as: {@code if (Log.isTraceEnabled()) Log.trace("..." + expensive + "...");}
+	 */
+	public static boolean isTraceEnabled() {
+		return LOG_LEVEL.getValue() <= Level.TRACE.getValue();
+	}
+
+	public static boolean isDebugEnabled() {
+		return LOG_LEVEL.getValue() <= Level.DEBUG.getValue();
+	}
+
 	public static void trace(String message) {
 		log(Level.TRACE, traceMethod, message);
 	}
