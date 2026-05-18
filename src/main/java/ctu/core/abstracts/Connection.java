@@ -193,8 +193,9 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			return null;
 		}
 
-		if (out.length >= 1500) {
-			Log.debug("Packets should not exceed 1500 bytes after compression.");
+		if (out.length > 1500) {
+			Log.warn("[WARN][PACKET_OVERSIZE] " + packet.getClass().getSimpleName()
+					+ " is " + out.length + " bytes compressed, exceeds MTU 1500 - will fragment.");
 		}
 
 		return out;
