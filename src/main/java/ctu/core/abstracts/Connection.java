@@ -75,7 +75,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	 * @return
 	 */
 	public Packet bytesToPacket(byte[] bytes) {
-		if (bytes == null || bytes.length == 0) {
+		if (bytes == null || bytes.length < 3) {
 			return null;
 		}
 
@@ -101,7 +101,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			packet.unmarshal(compression.decompress(Arrays.copyOfRange(bytes, 3, bytes.length)), 0);
 		} catch (final InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException | SecurityException | BufferUnderflowException e) {
 			Log.error("Packet instantiation/unmarshal error", e);
-		} catch (final InputMismatchException | IOException e) {
+		} catch (final InputMismatchException | IOException | ArrayIndexOutOfBoundsException | NegativeArraySizeException e) {
 			Log.debug("Packet parse error: " + e.getMessage());
 		}
 
@@ -138,18 +138,40 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 
 				ByteArrayOutputStream baos = new ByteArrayOutputStream();
 				byte[] tmp = new byte[4 * 1024];
+				int total = 0;
 
 				while (!iflr.finished()) {
 					int size = iflr.inflate(tmp);
+					if (size == 0 && iflr.needsInput()) {
+						// No more compressed input to consume and stream never
+						// signalled finished() - malformed/truncated data.
+						break;
+					}
+					total += size;
+					if (total > MAX_DECOMPRESSED_SIZE) {
+						throw new IOException("Decompressed packet exceeds " + MAX_DECOMPRESSED_SIZE
+								+ " bytes - refusing (possible decompression bomb).");
+					}
 					baos.write(tmp, 0, size);
 				}
 
 				return baos.toByteArray();
+			} catch (IOException ex) {
+				throw ex;
 			} catch (Exception ex) {
 				throw new IOException("Decompression error", ex);
 			}
 		}
 	};
+
+	/**
+	 * Hard ceiling on decompressed packet size, enforced during inflate before any
+	 * bytes reach Colfer's unmarshal. The largest legitimate marshalled packet
+	 * project-wide is capped at colferSizeMax = 4098 bytes (see
+	 * PacketClientUpdateBatch), so this leaves generous headroom while still
+	 * refusing a tiny malicious payload that would otherwise inflate to gigabytes.
+	 */
+	private static final int MAX_DECOMPRESSED_SIZE = 64 * 1024;
 
 	/**
 	 * packetToBytes takes a Compression object as an argument and returns a compressed version of the marshalled packet data. The method compresses the packet data using the compress method of the Compression object, and then checks whether the compressed data exceeds the MTU size limit of 1500 bytes. If the compressed data is larger than the MTU size, the method prints a warning message to the console.

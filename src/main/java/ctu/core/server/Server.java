@@ -52,6 +52,17 @@ public class Server<T> implements Runnable {
 	/** Special shard ID for connections not yet assigned */
 	public static final int UNASSIGNED_SHARD = -1;
 
+	/** Max concurrent connections accepted from a single source IP, checked pre-TLS-handshake. */
+	private static final int MAX_CONNECTIONS_PER_IP = 10;
+
+	/** Max total concurrent connections accepted server-wide, checked pre-TLS-handshake. */
+	private static final int MAX_TOTAL_CONNECTIONS = 20_000;
+
+	/** Source IP -> concurrent accepted connection count, for the caps above. */
+	private final ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> connectionsPerIp = new ConcurrentHashMap<>();
+
+	private final java.util.concurrent.atomic.AtomicInteger totalConnections = new java.util.concurrent.atomic.AtomicInteger();
+
 	/** Shard ID -> connections in that shard */
 	private final ConcurrentHashMap<Integer, ConcurrentHashMap<Long, ServerConnectionHandler<T>>> shardedConnections = new ConcurrentHashMap<>();
 
@@ -486,9 +497,40 @@ public class Server<T> implements Runnable {
 		try {
 			ServerBootstrap bootstrap = new ServerBootstrap();
 
-			bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class).childHandler(new ChannelInitializer<SocketChannel>() {
+			bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
+					.option(io.netty.channel.ChannelOption.SO_BACKLOG, 1024)
+					.childHandler(new ChannelInitializer<SocketChannel>() {
 				@Override
 				public void initChannel(SocketChannel ch) throws Exception {
+					String remoteIp = (ch.remoteAddress() != null)
+							? ch.remoteAddress().getAddress().getHostAddress()
+							: "unknown";
+
+					// Reject over-cap connections before spending any TLS handshake
+					// or per-connection allocation cost.
+					if (totalConnections.get() >= MAX_TOTAL_CONNECTIONS) {
+						Log.debug("Rejecting connection from " + remoteIp + ": server-wide connection cap (" + MAX_TOTAL_CONNECTIONS + ") reached.");
+						ch.close();
+						return;
+					}
+
+					java.util.concurrent.atomic.AtomicInteger ipCount = connectionsPerIp.computeIfAbsent(remoteIp, _ -> new java.util.concurrent.atomic.AtomicInteger());
+					if (ipCount.incrementAndGet() > MAX_CONNECTIONS_PER_IP) {
+						ipCount.decrementAndGet();
+						Log.debug("Rejecting connection from " + remoteIp + ": per-IP connection cap (" + MAX_CONNECTIONS_PER_IP + ") reached.");
+						ch.close();
+						return;
+					}
+					totalConnections.incrementAndGet();
+
+					ch.closeFuture().addListener(_ -> {
+						totalConnections.decrementAndGet();
+						java.util.concurrent.atomic.AtomicInteger count = connectionsPerIp.get(remoteIp);
+						if (count != null && count.decrementAndGet() <= 0) {
+							connectionsPerIp.remove(remoteIp, count);
+						}
+					});
+
 					ChannelPipeline pipeline = ch.pipeline();
 
 					// TLS
@@ -510,6 +552,17 @@ public class Server<T> implements Runnable {
 							}
 						}
 					});
+
+					// Length-prefixed framing on the decrypted stream: matches the
+					// [2-byte length][1-byte type][payload] wire format written by
+					// Connection.sendTCP. Without this, a coalesced or fragmented
+					// TCP/TLS read is handled as if it were exactly one application
+					// packet, which desyncs under adversarial byte-level
+					// fragmentation. lengthAdjustment=1 accounts for the 1-byte type
+					// field between the length prefix and the counted payload; the
+					// 65535+3 cap matches the wire's own 16-bit length field so a
+					// declared length can never exceed what that field can represent.
+					pipeline.addLast(new io.netty.handler.codec.LengthFieldBasedFrameDecoder(65535 + 3, 0, 2, 1, 0));
 
 					// Timeouts
 					pipeline.addLast(new ReadTimeoutHandler(timeout));

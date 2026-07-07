@@ -1,2 +1,5 @@
 /target/
 nul
+
+# graphify knowledge-graph output (local only)
+graphify-out/
