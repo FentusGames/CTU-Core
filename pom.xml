@@ -2,13 +2,19 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.fentusgames</groupId>
 	<artifactId>ctu-core</artifactId>
-	<version>4.1.3</version>
+	<version>4.1.4</version>
 	<name>CTU Core</name>
 	<description>CTU-Core is a Netty-based Java client-server application that facilitates communication between clients and servers with advanced encryption methods such as SSL, TLS, compression, and other features.</description>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<maven.compiler.source>25</maven.compiler.source>
-		<maven.compiler.target>25</maven.compiler.target>
+		<!--
+			Target 21, not 25. Songs of Syx ships and runs on a bundled JRE 21, and the
+			SyxSync mod embeds CTU-Core, so class files above version 65 fail to load there.
+			Consumers running on newer JVMs are unaffected - Java loads older class files fine.
+		-->
+		<maven.compiler.release>21</maven.compiler.release>
+		<maven.compiler.source>21</maven.compiler.source>
+		<maven.compiler.target>21</maven.compiler.target>
 		<lwjgl.version>3.2.2</lwjgl.version>
 		<junit.version>5.4.2</junit.version>
 	</properties>

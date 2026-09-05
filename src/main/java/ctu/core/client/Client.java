@@ -57,6 +57,9 @@ public class Client<T> implements Runnable {
 	private String pingName = "";
 
 	private volatile ClientConnectionHandler<T> connectionHandler;
+
+	/** Listeners registered before the channel existed, attached in initChannel. */
+	private final java.util.concurrent.CopyOnWriteArrayList<Listener<T>> pendingListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
 	private HashMap<Integer, Class<?>> clazzes = new HashMap<>();
 
 	private Integer key = 0;
@@ -212,6 +215,17 @@ public class Client<T> implements Runnable {
 						}
 					});
 
+					// Re-frame the inbound stream on the 2-byte big-endian length prefix written
+					// by Connection.sendTCP, mirroring the decoder the server side already
+					// installs. Without this the client treats every socket read as exactly one
+					// application packet, which TCP never guarantees: a large server->client
+					// payload always fragments (TLS records cap at 16 KiB) and back-to-back
+					// small packets can coalesce into a single read. Both silently corrupt the
+					// packet stream. lengthAdjustment=1 accounts for the 1-byte type field
+					// between the length prefix and the counted payload; the 65535+3 cap
+					// matches the wire's own 16-bit length field.
+					pipeline.addLast(new io.netty.handler.codec.LengthFieldBasedFrameDecoder(65535 + 3, 0, 2, 1, 0));
+
 					// Add a basic timeout if the client has not sent or received information in
 					// past X seconds.
 					ch.pipeline().addLast(new ReadTimeoutHandler(timeout)).addLast(new WriteTimeoutHandler(timeout));
@@ -222,6 +236,13 @@ public class Client<T> implements Runnable {
 
 					// Set the classes for the connection handler.
 					connectionHandler.setClazzes(clazzes);
+
+					// Attach any listeners registered before the connection existed, so that
+					// addListener() can be called at configuration time - which is the order
+					// the documented usage uses - without missing channelActive.
+					for (Listener<T> pending : pendingListeners) {
+						connectionHandler.addListener(pending);
+					}
 
 					// Add the connection handler to the pipeline.
 					pipeline.addLast(connectionHandler);
@@ -285,12 +306,28 @@ public class Client<T> implements Runnable {
 		return this;
 	}
 
+	/**
+	 * Registers a listener. Safe to call before or after {@link #start}: the
+	 * connection handler only exists once the channel is initialised, so listeners
+	 * added earlier are held here and attached when it is. They are also retained so
+	 * that a reconnect re-attaches them.
+	 */
 	public void addListener(Listener<T> listener) {
-		connectionHandler.addListener(listener);
+		if (!pendingListeners.contains(listener)) {
+			pendingListeners.add(listener);
+		}
+		ClientConnectionHandler<T> handler = connectionHandler;
+		if (handler != null) {
+			handler.addListener(listener);
+		}
 	}
 
 	public void removeListener(Listener<T> listener) {
-		connectionHandler.removeListener(listener);
+		pendingListeners.remove(listener);
+		ClientConnectionHandler<T> handler = connectionHandler;
+		if (handler != null) {
+			handler.removeListener(listener);
+		}
 	}
 
 	public void setPing(long ping) {

@@ -161,13 +161,13 @@ public class Server<T> implements Runnable {
 
 	public void broadcastTCP(Packet packet) {
 		for (ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard : shardedConnections.values()) {
-			shard.forEach((_, handler) -> handler.sendTCP(packet));
+			shard.forEach((id, handler) -> handler.sendTCP(packet));
 		}
 	}
 
 	public void broadcastTCP(Packet packet, Predicate<Connection<T>> condition) {
 		for (ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard : shardedConnections.values()) {
-			shard.forEach((_, handler) -> {
+			shard.forEach((id, handler) -> {
 				if (condition.test(handler)) {
 					handler.sendTCP(packet);
 				}
@@ -217,7 +217,7 @@ public class Server<T> implements Runnable {
 	 * Called during channelActive().
 	 */
 	void addConnectionToShard(long connectionId, ServerConnectionHandler<T> handler, int shardId) {
-		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.computeIfAbsent(shardId, _ -> new ConcurrentHashMap<>());
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.computeIfAbsent(shardId, key -> new ConcurrentHashMap<>());
 		shard.put(connectionId, handler);
 		connectionShardMap.put(connectionId, shardId);
 	}
@@ -267,7 +267,7 @@ public class Server<T> implements Runnable {
 		}
 
 		// Copy-then-remove pattern: add to new shard first
-		ConcurrentHashMap<Long, ServerConnectionHandler<T>> targetShard = shardedConnections.computeIfAbsent(targetShardId, _ -> new ConcurrentHashMap<>());
+		ConcurrentHashMap<Long, ServerConnectionHandler<T>> targetShard = shardedConnections.computeIfAbsent(targetShardId, key -> new ConcurrentHashMap<>());
 		targetShard.put(connectionId, handler);
 
 		// Update reverse mapping
@@ -309,7 +309,7 @@ public class Server<T> implements Runnable {
 	 * @return The shard's connection map (never null, may be empty)
 	 */
 	public ConcurrentHashMap<Long, ServerConnectionHandler<T>> getShardConnections(int shardId) {
-		return shardedConnections.computeIfAbsent(shardId, _ -> new ConcurrentHashMap<>());
+		return shardedConnections.computeIfAbsent(shardId, key -> new ConcurrentHashMap<>());
 	}
 
 	/**
@@ -359,7 +359,7 @@ public class Server<T> implements Runnable {
 	public void broadcastToShard(int shardId, Packet packet) {
 		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.get(shardId);
 		if (shard != null) {
-			shard.forEach((_, handler) -> handler.sendTCP(packet));
+			shard.forEach((id, handler) -> handler.sendTCP(packet));
 		}
 	}
 
@@ -369,7 +369,7 @@ public class Server<T> implements Runnable {
 	public void broadcastToShard(int shardId, Packet packet, Predicate<Connection<T>> condition) {
 		ConcurrentHashMap<Long, ServerConnectionHandler<T>> shard = shardedConnections.get(shardId);
 		if (shard != null) {
-			shard.forEach((_, handler) -> {
+			shard.forEach((id, handler) -> {
 				if (condition.test(handler)) {
 					handler.sendTCP(packet);
 				}
@@ -514,7 +514,7 @@ public class Server<T> implements Runnable {
 						return;
 					}
 
-					java.util.concurrent.atomic.AtomicInteger ipCount = connectionsPerIp.computeIfAbsent(remoteIp, _ -> new java.util.concurrent.atomic.AtomicInteger());
+					java.util.concurrent.atomic.AtomicInteger ipCount = connectionsPerIp.computeIfAbsent(remoteIp, key -> new java.util.concurrent.atomic.AtomicInteger());
 					if (ipCount.incrementAndGet() > MAX_CONNECTIONS_PER_IP) {
 						ipCount.decrementAndGet();
 						Log.debug("Rejecting connection from " + remoteIp + ": per-IP connection cap (" + MAX_CONNECTIONS_PER_IP + ") reached.");
@@ -523,7 +523,7 @@ public class Server<T> implements Runnable {
 					}
 					totalConnections.incrementAndGet();
 
-					ch.closeFuture().addListener(_ -> {
+					ch.closeFuture().addListener(future -> {
 						totalConnections.decrementAndGet();
 						java.util.concurrent.atomic.AtomicInteger count = connectionsPerIp.get(remoteIp);
 						if (count != null && count.decrementAndGet() <= 0) {

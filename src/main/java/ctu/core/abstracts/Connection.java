@@ -114,7 +114,10 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	private Compression compression = new Compression() {
 		@Override
 		public byte[] compress(byte[] bytes) throws IOException {
-			try (Deflater dfl = new Deflater()) {
+			// Deflater only became AutoCloseable in Java 22; this module targets 21, so
+			// the native deflater is released explicitly in a finally block instead.
+			Deflater dfl = new Deflater();
+			try {
 				dfl.setLevel(Deflater.BEST_SPEED);
 				dfl.setInput(bytes);
 				dfl.finish();
@@ -128,12 +131,16 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 				}
 
 				return baos.toByteArray();
+			} finally {
+				dfl.end();
 			}
 		}
 
 		@Override
 		public byte[] decompress(byte[] bytes) throws IOException {
-			try (Inflater iflr = new Inflater()) {
+			// Inflater only became AutoCloseable in Java 22; see the note in compress().
+			Inflater iflr = new Inflater();
+			try {
 				iflr.setInput(bytes);
 
 				ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -160,6 +167,8 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 				throw ex;
 			} catch (Exception ex) {
 				throw new IOException("Decompression error", ex);
+			} finally {
+				iflr.end();
 			}
 		}
 	};
@@ -263,7 +272,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		int size = bytes.length;
 
 		// Track bandwidth per packet type
-		packetBytesSent.computeIfAbsent(packetName, _ -> new long[2]);
+		packetBytesSent.computeIfAbsent(packetName, unused -> new long[2]);
 		long[] stats = packetBytesSent.get(packetName);
 		stats[0]++;
 		stats[1] += size;
