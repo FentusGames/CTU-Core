@@ -16,6 +16,7 @@ public class ServerConfig {
 	private String transferTokenSecret;
 	private int transferTokenExpirySeconds = 30;
 	private int debugPort = 0;
+	private Integer nodeId;
 	private String databaseUrl;
 	private String databaseUsername;
 	private String databasePassword;
@@ -169,6 +170,43 @@ public class ServerConfig {
 
 	public void setDebugPort(int debugPort) {
 		this.debugPort = debugPort;
+	}
+
+	/**
+	 * Node id for Snowflake id generation (0..8191). An explicit {@code server.nodeId}
+	 * wins; otherwise it derives from the trailing number of the server id:
+	 * {@code shard-N} is N and {@code lobby-N} is N-1 (lobby-1 is 0). Lobbies never mint
+	 * runtime ids, so a lobby overlapping a shard is harmless; game shards must differ.
+	 */
+	public int getNodeId() {
+		if (nodeId != null) {
+			return nodeId;
+		}
+		int trailing = trailingNumber(serverId);
+		if (trailing < 0) {
+			throw new IllegalStateException(
+					"server.nodeId is not set and serverId '" + serverId + "' has no trailing number");
+		}
+		return serverType == ServerType.LOBBY ? trailing - 1 : trailing;
+	}
+
+	public void setNodeId(int nodeId) {
+		this.nodeId = nodeId;
+	}
+
+	private static int trailingNumber(String text) {
+		if (text == null) {
+			return -1;
+		}
+		int end = text.length();
+		int start = end;
+		while (start > 0 && Character.isDigit(text.charAt(start - 1))) {
+			start--;
+		}
+		if (start == end) {
+			return -1;
+		}
+		return Integer.parseInt(text.substring(start, end));
 	}
 
 	public String getDatabaseUrl() {
