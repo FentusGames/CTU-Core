@@ -25,7 +25,8 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.MultiThreadIoEventLoopGroup;
+import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
@@ -72,8 +73,8 @@ public class Server<T> implements Runnable {
 	/** System ID -> Shard ID mapping (configured at startup) */
 	private volatile Map<Long, Integer> systemToShardMap = Collections.emptyMap();
 
-	private final EventLoopGroup bossGroup = new NioEventLoopGroup();
-	private final EventLoopGroup workerGroup = new NioEventLoopGroup();
+	private final EventLoopGroup bossGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+	private final EventLoopGroup workerGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
 
 	private final int port;
 	private final int timeout;
