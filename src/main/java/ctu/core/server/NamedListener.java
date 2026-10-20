@@ -43,10 +43,29 @@ public class NamedListener<T> {
 		return t;
 	});
 
+	/**
+	 * Most packet reads one listener holds waiting for its worker. Every packet
+	 * from every connection is queued on every listener, so a listener that
+	 * stalls (a wedged JDBC call) or a flood would otherwise grow this queue
+	 * until the heap ran out. Past the cap new reads are dropped for this
+	 * listener only; connection lifecycle events are always queued.
+	 */
+	static final int MAX_PENDING_READS = 20_000;
+
+	/** How often a listener that is dropping reads says so, at most. */
+	private static final long DROP_LOG_INTERVAL_MS = 10_000;
+
 	final Listener<T> listener;
 	final String name;
 
 	private final LinkedBlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
+
+	/** Reads queued and not yet run, against {@link #MAX_PENDING_READS}. */
+	private final AtomicInteger pendingReads = new AtomicInteger();
+
+	/** Reads dropped since the last drop log line, and when that line was written. */
+	private final AtomicInteger droppedReads = new AtomicInteger();
+	private volatile long lastDropLogMs = 0;
 
 	private volatile boolean running = true;
 
@@ -170,6 +189,35 @@ public class NamedListener<T> {
 		queue.offer(r);
 	}
 
+	/** Queue a packet read, unless {@link #MAX_PENDING_READS} are already waiting. */
+	void enqueueRead(Runnable r) {
+		if (!running) {
+			return;
+		}
+
+		if (pendingReads.incrementAndGet() > MAX_PENDING_READS) {
+			pendingReads.decrementAndGet();
+			int dropped = droppedReads.incrementAndGet();
+			long now = System.currentTimeMillis();
+			if (now - lastDropLogMs >= DROP_LOG_INTERVAL_MS) {
+				lastDropLogMs = now;
+				droppedReads.addAndGet(-dropped);
+				Log.warn("Listener [" + name + "] backlog full (" + MAX_PENDING_READS + " reads); dropped " + dropped + " packet read(s)");
+			}
+			return;
+		}
+
+		queue.offer(() -> {
+			pendingReads.decrementAndGet();
+			r.run();
+		});
+	}
+
+	/** Packet reads waiting for this listener's worker. */
+	int getPendingReads() {
+		return pendingReads.get();
+	}
+
 	void shutdown() {
 		running = false;
 
@@ -183,5 +231,6 @@ public class NamedListener<T> {
 		}
 
 		queue.clear();
+		pendingReads.set(0);
 	}
 }

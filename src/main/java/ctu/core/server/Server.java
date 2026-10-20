@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -94,6 +95,21 @@ public class Server<T> implements Runnable {
 	 * CopyOnWriteArrayList: - Safe iteration without external locks. - Great when dispatch is frequent and listeners are rarely added/removed.
 	 */
 	private final CopyOnWriteArrayList<NamedListener<T>> listeners = new CopyOnWriteArrayList<>();
+
+	/**
+	 * Decides, on the Netty thread and before the fan-out, whether an inbound
+	 * packet reaches the listeners at all. Null admits everything. The game sets
+	 * a login gate here, so a connection that has not logged in reaches only the
+	 * handful of listeners that log it in, instead of every listener there is.
+	 */
+	private volatile BiPredicate<Connection<T>, Packet> packetGate;
+
+	/**
+	 * Connections the per-connection flood cap in {@link ServerConnectionHandler}
+	 * never throttles, such as another server's bridge link, which carries every
+	 * player's transfer on one connection. Null exempts none.
+	 */
+	private volatile Predicate<Connection<T>> floodExemption;
 
 	/**
 	 * Constructs a new Server object with the given port number. It also initializes the SSL context with the specified SSL provider, protocols, and the server's certificate and private key for secure communication.
@@ -418,19 +434,56 @@ public class Server<T> implements Runnable {
 	}
 
 	public void dispatchChannelActive(ServerConnectionHandler<T> connection) {
-		forEachListenerEnqueue(nl -> nl.listener.channelActive(connection), "channelActive");
+		forEachListenerEnqueue(nl -> nl.listener.channelActive(connection), "channelActive", false);
 	}
 
 	public void dispatchChannelInactive(ServerConnectionHandler<T> connection) {
-		forEachListenerEnqueue(nl -> nl.listener.channelInactive(connection), "channelInactive");
+		forEachListenerEnqueue(nl -> nl.listener.channelInactive(connection), "channelInactive", false);
 	}
 
 	public void dispatchChannelExceptionCaught(ServerConnectionHandler<T> connection) {
-		forEachListenerEnqueue(nl -> nl.listener.channelExceptionCaught(connection), "channelExceptionCaught");
+		forEachListenerEnqueue(nl -> nl.listener.channelExceptionCaught(connection), "channelExceptionCaught", false);
 	}
 
 	public void dispatchChannelRead(ServerConnectionHandler<T> connection, Packet packet) {
-		forEachListenerEnqueue(nl -> nl.listener.channelRead(connection, packet), "channelRead");
+		BiPredicate<Connection<T>, Packet> gate = packetGate;
+		if (gate != null) {
+			boolean admitted;
+			try {
+				admitted = gate.test(connection, packet);
+			} catch (Throwable t) {
+				Log.error("Packet gate failed on " + packet.getClass().getSimpleName() + "; dropping it", t);
+				admitted = false;
+			}
+			if (!admitted) {
+				Log.trace("Packet gate dropped " + packet.getClass().getSimpleName() + " (conn: " + connection.getConnectionID() + ")");
+				return;
+			}
+		}
+		forEachListenerEnqueue(nl -> nl.listener.channelRead(connection, packet), "channelRead", true);
+	}
+
+	/** See {@link #packetGate}. Null admits everything (the default). */
+	public void setPacketGate(BiPredicate<Connection<T>, Packet> gate) {
+		this.packetGate = gate;
+	}
+
+	/** See {@link #floodExemption}. Null exempts no connection (the default). */
+	public void setFloodExemption(Predicate<Connection<T>> exemption) {
+		this.floodExemption = exemption;
+	}
+
+	boolean isFloodExempt(Connection<T> connection) {
+		Predicate<Connection<T>> exemption = floodExemption;
+		if (exemption == null) {
+			return false;
+		}
+		try {
+			return exemption.test(connection);
+		} catch (Throwable t) {
+			Log.error("Flood exemption check failed (conn: " + connection.getConnectionID() + ")", t);
+			return false;
+		}
 	}
 
 	@FunctionalInterface
@@ -442,16 +495,24 @@ public class Server<T> implements Runnable {
 	 * Enqueue a callback to every listener's dedicated thread.
 	 *
 	 * Each listener processes events sequentially, preserving ordering for that listener.
+	 * A read is dropped when that listener's backlog of reads is full
+	 * ({@link NamedListener#MAX_PENDING_READS}); connection lifecycle events are
+	 * never dropped, so a session is always cleaned up.
 	 */
-	private void forEachListenerEnqueue(NamedListenerAction<T> action, String opName) {
+	private void forEachListenerEnqueue(NamedListenerAction<T> action, String opName, boolean read) {
 		for (NamedListener<T> nl : listeners) {
-			nl.enqueue(() -> {
+			Runnable task = () -> {
 				try {
 					action.run(nl);
 				} catch (Throwable t) {
 					Log.error("Listener [" + nl.name + "] failed during " + opName, t);
 				}
-			});
+			};
+			if (read) {
+				nl.enqueueRead(task);
+			} else {
+				nl.enqueue(task);
+			}
 		}
 	}
 

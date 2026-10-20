@@ -17,7 +17,32 @@ import io.netty.channel.ChannelHandlerContext;
  * @param  <T>
  */
 public class ServerConnectionHandler<T> extends Connection<T> {
+	/**
+	 * Per-connection flood cap: a token bucket checked for every frame on the
+	 * Netty thread, before the frame is inflated or fanned out to every
+	 * listener. A client refills {@link #FLOOD_RATE_PER_SEC} packets a second
+	 * and may save up {@link #FLOOD_BURST}; a frame with no token is dropped.
+	 * A connection that has dropped more than {@link #FLOOD_MAX_DROPS} frames
+	 * inside one {@link #FLOOD_WINDOW_NANOS} window is closed. A client at
+	 * twice the rate is gone in about five seconds; one slightly over it is
+	 * only trimmed. Real clients stay far below this: ListenerCommand, the
+	 * busiest handler, takes 20 a second. Per connection, never per IP, so
+	 * several clients on one address (multiboxing, CGNAT) each have their own.
+	 */
+	static final double FLOOD_RATE_PER_SEC = 100;
+	static final double FLOOD_BURST = 500;
+	static final long FLOOD_WINDOW_NANOS = 5_000_000_000L;
+	static final int FLOOD_MAX_DROPS = 500;
+
 	private final Server<T> server;
+
+	// Flood bucket state. channelRead0 for one channel always runs on that
+	// channel's event loop thread, so these need no synchronisation.
+	private double floodTokens = FLOOD_BURST;
+	private long floodRefilledAtNanos = System.nanoTime();
+	private long floodWindowStartNanos = 0;
+	private int floodDrops = 0;
+	private boolean floodClosed = false;
 
 	/**
 	 * Constructs a new ServerConnectionHandler with a given server and connectionObject.
@@ -98,6 +123,10 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 		// Track received bandwidth
 		addBytesReceived(size);
 
+		if (!admitFrame(System.nanoTime())) {
+			return;
+		}
+
 		byte[] bytes = new byte[size];
 		byteBuf.readBytes(bytes);
 
@@ -118,5 +147,50 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 		String packetName = (packet == null) ? "null" : packet.getClass().getName();
 
 		Log.trace("Received TCP packet: " + packetName + ", Size: " + size + " bytes. ");
+	}
+
+	/**
+	 * Takes one token for a frame arriving at {@code nowNanos}. False drops the
+	 * frame; a connection over {@link #FLOOD_MAX_DROPS} in one window is also
+	 * closed. A connection the server exempts (its bridge peers) always passes.
+	 */
+	boolean admitFrame(long nowNanos) {
+		long elapsed = nowNanos - floodRefilledAtNanos;
+		if (elapsed > 0) {
+			floodTokens = Math.min(FLOOD_BURST, floodTokens + elapsed * (FLOOD_RATE_PER_SEC / 1_000_000_000d));
+			floodRefilledAtNanos = nowNanos;
+		}
+
+		if (floodTokens >= 1) {
+			floodTokens -= 1;
+			return true;
+		}
+
+		if (server.isFloodExempt(this)) {
+			return true;
+		}
+
+		if (floodDrops == 0 || nowNanos - floodWindowStartNanos > FLOOD_WINDOW_NANOS) {
+			floodWindowStartNanos = nowNanos;
+			floodDrops = 0;
+		}
+		floodDrops++;
+
+		if (floodDrops > FLOOD_MAX_DROPS && !floodClosed) {
+			floodClosed = true;
+			Log.warn("Flood cap: closing connection " + getConnectionID() + " (user " + getUserID() + ", " + describeRemote() + "): over " + FLOOD_MAX_DROPS + " packets dropped in " + (FLOOD_WINDOW_NANOS / 1_000_000_000L) + " s at " + (int) FLOOD_RATE_PER_SEC + "/s");
+			if (getCtx() != null) {
+				getCtx().close();
+			}
+		}
+		return false;
+	}
+
+	private String describeRemote() {
+		try {
+			return String.valueOf(getCtx().channel().remoteAddress());
+		} catch (Exception e) {
+			return "unknown";
+		}
 	}
 }
