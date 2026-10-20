@@ -87,7 +87,12 @@ public class ClientConnectionHandler<T> extends Connection<T> {
 			listeners.forEach(listener -> listener.channelRead(this, packet));
 		}
 
-		Log.trace("Received TCP packet: " + packet.getClass().getName() + ", Size: " + size + " bytes. ");
+		// Guarded: built every packet otherwise, and a packet that would not parse
+		// (null) threw here and dropped the connection.
+		if (Log.isTraceEnabled()) {
+			Log.trace("Received TCP packet: " + (packet != null ? packet.getClass().getName() : "unparsed") + ", Size: "
+					+ size + " bytes. ");
+		}
 	}
 
 	@Override

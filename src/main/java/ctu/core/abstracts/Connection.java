@@ -114,16 +114,19 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	private Compression compression = new Compression() {
 		@Override
 		public byte[] compress(byte[] bytes) throws IOException {
-			// Deflater only became AutoCloseable in Java 22; this module targets 21, so
-			// the native deflater is released explicitly in a finally block instead.
-			Deflater dfl = new Deflater();
+			// The thread's own deflater, reset rather than made: a new one per packet
+			// set up and tore down zlib's native state (some 256 KB) every time, and
+			// with a big fight in view a tick sends hundreds of batches - most of the
+			// sending thread's time (thread dumps, 2026-10-20). A reset deflater
+			// writes the same stream a new one would.
+			Deflater dfl = DEFLATER.get();
+			dfl.reset();
 			try {
-				dfl.setLevel(Deflater.BEST_SPEED);
 				dfl.setInput(bytes);
 				dfl.finish();
 
-				ByteArrayOutputStream baos = new ByteArrayOutputStream();
-				byte[] tmp = new byte[4 * 1024];
+				ByteArrayOutputStream baos = new ByteArrayOutputStream(bytes.length / 2 + 64);
+				byte[] tmp = CHUNK.get();
 
 				while (!dfl.finished()) {
 					int size = dfl.deflate(tmp);
@@ -132,19 +135,21 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 
 				return baos.toByteArray();
 			} finally {
-				dfl.end();
+				// Let go of the input now, not at the thread's next packet.
+				dfl.reset();
 			}
 		}
 
 		@Override
 		public byte[] decompress(byte[] bytes) throws IOException {
-			// Inflater only became AutoCloseable in Java 22; see the note in compress().
-			Inflater iflr = new Inflater();
+			// The thread's own inflater, as compress() keeps its deflater.
+			Inflater iflr = INFLATER.get();
+			iflr.reset();
 			try {
 				iflr.setInput(bytes);
 
-				ByteArrayOutputStream baos = new ByteArrayOutputStream();
-				byte[] tmp = new byte[4 * 1024];
+				ByteArrayOutputStream baos = new ByteArrayOutputStream(bytes.length * 3 + 64);
+				byte[] tmp = CHUNK.get();
 				int total = 0;
 
 				while (!iflr.finished()) {
@@ -168,10 +173,23 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			} catch (Exception ex) {
 				throw new IOException("Decompression error", ex);
 			} finally {
-				iflr.end();
+				iflr.reset();
 			}
 		}
 	};
+
+	/**
+	 * Each thread's zlib streams and scratch, reused packet after packet (see
+	 * compress()). Per thread, not per connection: a server sends to one
+	 * connection from its tick workers and its event loop at once. Never ended:
+	 * one per sending thread for the life of the thread, and the JDK frees its
+	 * native memory when the thread is gone.
+	 */
+	private static final ThreadLocal<Deflater> DEFLATER = ThreadLocal.withInitial(() -> new Deflater(Deflater.BEST_SPEED));
+	private static final ThreadLocal<Inflater> INFLATER = ThreadLocal.withInitial(Inflater::new);
+	private static final ThreadLocal<byte[]> CHUNK = ThreadLocal.withInitial(() -> new byte[4 * 1024]);
+	/** The thread's marshal buffer, grown to the largest {@link #marshalBufferSize} it has been asked for. */
+	private static final ThreadLocal<byte[]> MARSHAL = new ThreadLocal<>();
 
 	/**
 	 * Hard ceiling on decompressed packet size, enforced during inflate before any
@@ -211,7 +229,12 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 
 	public byte[] packetToBytes(Compression compression, Packet packet) {
 		// Sized via {@link #setMarshalBufferSize}; configured per-Client/Server at construction time.
-		byte[] buf = new byte[marshalBufferSize];
+		// The thread's own, as the deflater is: only the marshalled bytes are copied out of it.
+		byte[] buf = MARSHAL.get();
+		if (buf == null || buf.length < marshalBufferSize) {
+			buf = new byte[marshalBufferSize];
+			MARSHAL.set(buf);
+		}
 		byte[] out = null;
 
 		try {
@@ -281,7 +304,8 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 		if (ctx == null) {
 			Log.debug("TCP send failed (not connected) - Packet: " + packetName + ", Size: " + size + " bytes.");
 		} else {
-			ChannelFuture future = ctx.writeAndFlush(Unpooled.copiedBuffer(bytes));
+			// Wrapped, not copied: the array is this send's own and nothing touches it again.
+			ChannelFuture future = ctx.writeAndFlush(Unpooled.wrappedBuffer(bytes));
 
 			future.addListener(new ChannelFutureListener() {
 				@Override
@@ -293,7 +317,7 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			});
 		}
 
-		Log.trace("Sent TCP packet: " + packetName + ", Size: " + size + " bytes.");
+		if (Log.isTraceEnabled()) Log.trace("Sent TCP packet: " + packetName + ", Size: " + size + " bytes.");
 	}
 
 	/**

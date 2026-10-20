@@ -143,10 +143,12 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 			server.dispatchChannelRead(this, packet);
 		}
 
-		// Guard against packet being null to avoid NPE in logs.
-		String packetName = (packet == null) ? "null" : packet.getClass().getName();
+		if (Log.isTraceEnabled()) {
+			// Guard against packet being null to avoid NPE in logs.
+			String packetName = (packet == null) ? "null" : packet.getClass().getName();
 
-		Log.trace("Received TCP packet: " + packetName + ", Size: " + size + " bytes. ");
+			Log.trace("Received TCP packet: " + packetName + ", Size: " + size + " bytes. ");
+		}
 	}
 
 	/**
