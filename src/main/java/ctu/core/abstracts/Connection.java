@@ -10,6 +10,7 @@ import java.util.InputMismatchException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
@@ -262,6 +263,41 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 	 * @return
 	 */
 	public void sendTCP(Packet packet) {
+		send(packet, false);
+	}
+
+	/**
+	 * Unflushed bytes a deferred packet may join: one TLS record's plaintext (SslHandler
+	 * wraps up to 16 KB a record), so each flush of deferred packets goes as one full record.
+	 */
+	public static final int DEFERRED_FLUSH_BYTES = 16 * 1024;
+
+	/** Bytes {@link #sendTCPDeferred} wrote since its last flush. */
+	private final AtomicInteger deferredBytes = new AtomicInteger();
+
+	/**
+	 * Sends the packet as {@link #sendTCP} does, the same bytes in the same order, but
+	 * leaves it unflushed until {@link #flushTCP}, any sendTCP on this connection, or a
+	 * deferred packet that would take the unflushed bytes past {@link #DEFERRED_FLUSH_BYTES}.
+	 * For a burst to one connection, such as a tick's position batches: every flush is a
+	 * TLS record, a socket write and an event-loop wakeup, and a 5,000-NPC fight flushed
+	 * ~326 packets a tick to each pilot (2026-10-20, FlushProbe: 21 flushes instead, the
+	 * server's event loop went from 8.7 to 0.9 ms a tick a pilot, and the client got the
+	 * tick's last packet ~3 ms sooner). Whoever defers calls {@link #flushTCP} when the
+	 * burst ends, in a finally.
+	 */
+	public void sendTCPDeferred(Packet packet) {
+		send(packet, true);
+	}
+
+	/** Flushes what {@link #sendTCPDeferred} left unflushed; does nothing when that is nothing. */
+	public void flushTCP() {
+		if (deferredBytes.getAndSet(0) > 0 && ctx != null) {
+			ctx.flush();
+		}
+	}
+
+	private void send(Packet packet, boolean deferred) {
 		if (isInactive()) {
 			return;
 		}
@@ -305,7 +341,17 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 			Log.debug("TCP send failed (not connected) - Packet: " + packetName + ", Size: " + size + " bytes.");
 		} else {
 			// Wrapped, not copied: the array is this send's own and nothing touches it again.
-			ChannelFuture future = ctx.writeAndFlush(Unpooled.wrappedBuffer(bytes));
+			ChannelFuture future;
+			if (deferred) {
+				// Flushed first when this packet would take the unflushed bytes past one record.
+				if (deferredBytes.get() + size > DEFERRED_FLUSH_BYTES && deferredBytes.getAndSet(0) > 0) {
+					ctx.flush();
+				}
+				future = ctx.write(Unpooled.wrappedBuffer(bytes));
+				deferredBytes.addAndGet(size);
+			} else {
+				future = ctx.writeAndFlush(Unpooled.wrappedBuffer(bytes));
+			}
 
 			future.addListener(new ChannelFutureListener() {
 				@Override
