@@ -16,6 +16,7 @@ import ctu.core.interfaces.Listener;
 import ctu.core.logger.Log;
 import ctu.core.packets.PacketPing;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -66,7 +67,8 @@ public class Client<T> implements Runnable {
 
 	private Integer key = 0;
 
-	private ChannelFuture future;
+	/** Set on the executor's thread by run(), read by close() on the caller's. */
+	private volatile ChannelFuture future;
 
 	private CallbackConnect callbackConnect;
 
@@ -143,13 +145,8 @@ public class Client<T> implements Runnable {
 		// Creating a thread pool with a cached pool of threads.
 		executorService = Executors.newScheduledThreadPool(32);
 
-		if (future != null && future.channel().isOpen()) {
-			try {
-				future.channel().close().sync();
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		}
+		// close() has closed the channel, or on its event loop started to: a sync()
+		// here would throw BlockingOperationException there while it is still open.
 
 		connected = false;
 		future = null;
@@ -340,32 +337,57 @@ public class Client<T> implements Runnable {
 		this.pingName = pingName;
 	}
 
+	/**
+	 * Closes the channel, then stops the ping task and the executor. The channel goes
+	 * first because run() is parked on its closeFuture: closing it is what lets that
+	 * task end, so the executor then terminates at once. The other way round,
+	 * awaitTermination ran out its full 3 s on every live client before the channel
+	 * was closed, and every login waited on the lobby's close (2026-10-21).
+	 * <p>
+	 * On the channel's own event loop (a packet handler resetting the client it came
+	 * in on) the close is only started: waiting for it there, or for the task that
+	 * waits for it, would wait on the thread that has to do it. A client whose event
+	 * loop is already gone still throws RejectedExecutionException, after its ping
+	 * task and executor are stopped.
+	 */
 	public void close() {
 		connected = false;
 
-		// Cancel ping task first
-		if (pingTask != null) {
-			pingTask.cancel(false);
-			pingTask = null;
-		}
-
-		executorService.shutdown(); // initiate shutdown
-
+		boolean onEventLoop = false;
 		try {
-			// wait for all tasks to finish or timeout after 10 seconds
-			if (!executorService.awaitTermination(3, TimeUnit.SECONDS)) {
-				executorService.shutdownNow(); // force shutdown if tasks are still running after 10 seconds
+			ChannelFuture f = future;
+			if (f != null) {
+				Channel channel = f.channel();
+				onEventLoop = channel.eventLoop().inEventLoop();
+				if (onEventLoop) {
+					channel.close();
+				} else {
+					try {
+						channel.close().sync();
+					} catch (InterruptedException e) {
+						Log.error("Channel close interrupted", e);
+					}
+				}
 			}
-		} catch (InterruptedException ex) {
-			executorService.shutdownNow(); // force shutdown if waiting is interrupted
-		}
+		} finally {
+			if (pingTask != null) {
+				pingTask.cancel(false);
+				pingTask = null;
+			}
 
-		try {
-			if (future != null) {
-				future.channel().close().sync();
+			executorService.shutdown(); // initiate shutdown
+
+			// On the event loop run() can only end once this thread is free to finish the close.
+			if (!onEventLoop) {
+				try {
+					// run() returns as soon as the closed channel wakes it
+					if (!executorService.awaitTermination(3, TimeUnit.SECONDS)) {
+						executorService.shutdownNow(); // force shutdown if tasks are still running after 3 seconds
+					}
+				} catch (InterruptedException ex) {
+					executorService.shutdownNow(); // force shutdown if waiting is interrupted
+				}
 			}
-		} catch (InterruptedException e) {
-			Log.error("Channel close interrupted", e);
 		}
 	}
 
