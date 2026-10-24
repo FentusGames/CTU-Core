@@ -1,6 +1,8 @@
 package ctu.core.server.config;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ServerConfig {
@@ -16,6 +18,7 @@ public class ServerConfig {
 	private String transferTokenSecret;
 	private int transferTokenExpirySeconds = 30;
 	private int debugPort = 0;
+	private List<String> trustedProxies = new ArrayList<>();
 	private Integer nodeId;
 	private String databaseUrl;
 	private String databaseUsername;
@@ -170,6 +173,20 @@ public class ServerConfig {
 
 	public void setDebugPort(int debugPort) {
 		this.debugPort = debugPort;
+	}
+
+	/**
+	 * TCP proxies (HAProxy with send-proxy-v2 and the like) whose PROXY protocol
+	 * header names the player's address: IP addresses or CIDR blocks, passed to
+	 * {@link ctu.core.server.Server#setTrustedProxies}. Empty trusts none, so every
+	 * connection is direct.
+	 */
+	public List<String> getTrustedProxies() {
+		return trustedProxies;
+	}
+
+	public void setTrustedProxies(List<String> trustedProxies) {
+		this.trustedProxies = trustedProxies;
 	}
 
 	/**

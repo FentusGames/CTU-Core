@@ -76,9 +76,19 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 		Log.debug("New connection established with id: " + id);
 	}
 
+	/**
+	 * True when channelActive never ran: a proxied connection that closed or
+	 * failed before its PROXY header (ProxyHeaderHandler holds channelActive back
+	 * until then). It has no id and the listeners never heard of it, so they must
+	 * not hear of it going away either; id -1 would reach them otherwise.
+	 */
+	private boolean neverActive() {
+		return getCtx() == null;
+	}
+
 	@Override
 	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-		if (isInactive()) {
+		if (isInactive() || neverActive()) {
 			return;
 		}
 
@@ -96,6 +106,11 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
 		if (isInactive()) {
+			return;
+		}
+
+		if (neverActive()) {
+			ctx.close();
 			return;
 		}
 
@@ -190,7 +205,7 @@ public class ServerConnectionHandler<T> extends Connection<T> {
 
 	private String describeRemote() {
 		try {
-			return String.valueOf(getCtx().channel().remoteAddress());
+			return String.valueOf(getRemoteAddress());
 		} catch (Exception e) {
 			return "unknown";
 		}

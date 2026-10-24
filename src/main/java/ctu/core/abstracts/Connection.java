@@ -3,6 +3,7 @@ package ctu.core.abstracts;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.net.InetSocketAddress;
 import java.nio.BufferUnderflowException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -17,6 +18,7 @@ import java.util.zip.Inflater;
 
 import ctu.core.interfaces.Compression;
 import ctu.core.logger.Log;
+import ctu.core.server.ProxyHeaderHandler;
 import ctu.core.server.Server;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -404,6 +406,17 @@ public class Connection<T> extends SimpleChannelInboundHandler<ByteBuf> {
 
 	public ChannelHandlerContext getCtx() {
 		return ctx;
+	}
+
+	/**
+	 * The address of the other end: for a connection a trusted proxy forwarded,
+	 * the player's address from its PROXY header (see
+	 * {@link ctu.core.server.ProxyHeaderHandler}), else the socket's own peer. Read
+	 * a player's address through this, never {@code getCtx().channel().remoteAddress()},
+	 * which behind a proxy is the proxy. Null before channelActive.
+	 */
+	public InetSocketAddress getRemoteAddress() {
+		return ctx == null ? null : ProxyHeaderHandler.clientAddress(ctx.channel());
 	}
 
 	public boolean isInactive() {

@@ -1,6 +1,9 @@
 package ctu.core.server;
 
 import java.io.File;
+import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -9,6 +12,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -20,6 +24,7 @@ import ctu.core.abstracts.Packet;
 import ctu.core.interfaces.Listener;
 import ctu.core.logger.Log;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -30,12 +35,16 @@ import io.netty.channel.MultiThreadIoEventLoopGroup;
 import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.haproxy.HAProxyMessageDecoder;
+import io.netty.handler.ipfilter.IpFilterRuleType;
+import io.netty.handler.ipfilter.IpSubnetFilterRule;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
+import io.netty.util.NetUtil;
 
 /**
  *
@@ -61,9 +70,9 @@ public class Server<T> implements Runnable {
 	private static final int MAX_TOTAL_CONNECTIONS = 20_000;
 
 	/** Source IP -> concurrent accepted connection count, for the caps above. */
-	private final ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> connectionsPerIp = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, AtomicInteger> connectionsPerIp = new ConcurrentHashMap<>();
 
-	private final java.util.concurrent.atomic.AtomicInteger totalConnections = new java.util.concurrent.atomic.AtomicInteger();
+	private final AtomicInteger totalConnections = new AtomicInteger();
 
 	/** Shard ID -> connections in that shard */
 	private final ConcurrentHashMap<Integer, ConcurrentHashMap<Long, ServerConnectionHandler<T>>> shardedConnections = new ConcurrentHashMap<>();
@@ -110,6 +119,12 @@ public class Server<T> implements Runnable {
 	 * player's transfer on one connection. Null exempts none.
 	 */
 	private volatile Predicate<Connection<T>> floodExemption;
+
+	/**
+	 * Socket peers whose connections open with a PROXY protocol header naming the
+	 * player's address; see {@link #setTrustedProxies}. Empty trusts none.
+	 */
+	private volatile List<IpSubnetFilterRule> trustedProxies = List.of();
 
 	/**
 	 * Constructs a new Server object with the given port number. It also initializes the SSL context with the specified SSL provider, protocols, and the server's certificate and private key for secure communication.
@@ -486,6 +501,68 @@ public class Server<T> implements Runnable {
 		}
 	}
 
+	/**
+	 * Sets the TCP proxies (HAProxy with send-proxy-v2 and the like) allowed to
+	 * name a player's address with a PROXY protocol header, each an IP address or
+	 * a CIDR block such as {@code 10.66.0.1} or {@code 10.66.0.0/24}. A connection
+	 * from one of them must open with that header ({@link ProxyHeaderHandler});
+	 * any other connection is direct and its first bytes go straight to TLS. Empty
+	 * trusts none (the default). Call before {@link #start()}.
+	 *
+	 * @throws IllegalArgumentException for an entry that is not an IP literal or
+	 *                                  CIDR block (hostnames are refused)
+	 */
+	public void setTrustedProxies(Collection<String> proxies) {
+		List<IpSubnetFilterRule> rules = new ArrayList<>();
+		for (String entry : proxies) {
+			rules.add(subnetRule(entry.trim()));
+		}
+		this.trustedProxies = List.copyOf(rules);
+		if (!rules.isEmpty()) {
+			Log.info("Port " + port + ": PROXY protocol header required from " + proxies);
+		}
+	}
+
+	static IpSubnetFilterRule subnetRule(String entry) {
+		int slash = entry.indexOf('/');
+		String ip = (slash < 0) ? entry : entry.substring(0, slash);
+		boolean v4 = NetUtil.isValidIpV4Address(ip);
+		if (!v4 && !NetUtil.isValidIpV6Address(ip)) {
+			throw new IllegalArgumentException("Trusted proxy '" + entry + "' is not an IP address or CIDR block");
+		}
+		int prefix = (slash < 0) ? (v4 ? 32 : 128) : Integer.parseInt(entry.substring(slash + 1));
+		return new IpSubnetFilterRule(ip, prefix, IpFilterRuleType.ACCEPT);
+	}
+
+	boolean isTrustedProxy(InetSocketAddress peer) {
+		for (IpSubnetFilterRule rule : trustedProxies) {
+			if (rule.matches(peer)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Counts {@code channel} against {@link #MAX_CONNECTIONS_PER_IP} for
+	 * {@code ip} until it closes. False, with nothing counted, when that address
+	 * is already full.
+	 */
+	boolean admitPerIp(Channel channel, String ip) {
+		AtomicInteger ipCount = connectionsPerIp.computeIfAbsent(ip, key -> new AtomicInteger());
+		if (ipCount.incrementAndGet() > MAX_CONNECTIONS_PER_IP) {
+			ipCount.decrementAndGet();
+			return false;
+		}
+		channel.closeFuture().addListener(future -> {
+			AtomicInteger count = connectionsPerIp.get(ip);
+			if (count != null && count.decrementAndGet() <= 0) {
+				connectionsPerIp.remove(ip, count);
+			}
+		});
+		return true;
+	}
+
 	@FunctionalInterface
 	private interface NamedListenerAction<T> {
 		void run(NamedListener<T> nl);
@@ -564,9 +641,8 @@ public class Server<T> implements Runnable {
 					.childHandler(new ChannelInitializer<SocketChannel>() {
 				@Override
 				public void initChannel(SocketChannel ch) throws Exception {
-					String remoteIp = (ch.remoteAddress() != null)
-							? ch.remoteAddress().getAddress().getHostAddress()
-							: "unknown";
+					InetSocketAddress peer = ch.remoteAddress();
+					String remoteIp = (peer != null) ? peer.getAddress().getHostAddress() : "unknown";
 
 					// Reject over-cap connections before spending any TLS handshake
 					// or per-connection allocation cost.
@@ -576,32 +652,34 @@ public class Server<T> implements Runnable {
 						return;
 					}
 
-					java.util.concurrent.atomic.AtomicInteger ipCount = connectionsPerIp.computeIfAbsent(remoteIp, key -> new java.util.concurrent.atomic.AtomicInteger());
-					if (ipCount.incrementAndGet() > MAX_CONNECTIONS_PER_IP) {
-						ipCount.decrementAndGet();
+					// A proxied connection is counted against its player's address
+					// once the PROXY header names it (ProxyHeaderHandler): counted
+					// here, every player behind the proxy would share one cap.
+					boolean proxied = peer != null && isTrustedProxy(peer);
+					if (!proxied && !admitPerIp(ch, remoteIp)) {
 						Log.debug("Rejecting connection from " + remoteIp + ": per-IP connection cap (" + MAX_CONNECTIONS_PER_IP + ") reached.");
 						ch.close();
 						return;
 					}
 					totalConnections.incrementAndGet();
-
-					ch.closeFuture().addListener(future -> {
-						totalConnections.decrementAndGet();
-						java.util.concurrent.atomic.AtomicInteger count = connectionsPerIp.get(remoteIp);
-						if (count != null && count.decrementAndGet() <= 0) {
-							connectionsPerIp.remove(remoteIp, count);
-						}
-					});
+					ch.closeFuture().addListener(future -> totalConnections.decrementAndGet());
 
 					ChannelPipeline pipeline = ch.pipeline();
+
+					if (proxied) {
+						pipeline.addLast(new HAProxyMessageDecoder());
+						pipeline.addLast(new ProxyHeaderHandler(getServer()));
+					}
 
 					// TLS
 					SslHandler sslHandler = sslCtx.newHandler(ch.alloc());
 					pipeline.addLast(sslHandler);
 
-					// Log TLS handshake result with a clear message
-					String remoteAddr = ch.remoteAddress().toString();
+					// Log TLS handshake result with a clear message. Read the address
+					// when it ends: by then a proxied connection's header has named
+					// the player.
 					sslHandler.handshakeFuture().addListener(future -> {
+						String remoteAddr = String.valueOf(ProxyHeaderHandler.clientAddress(ch));
 						if (future.isSuccess()) {
 							Log.debug("TLS OK: " + remoteAddr);
 						} else {
