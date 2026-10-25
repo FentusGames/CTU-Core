@@ -12,8 +12,7 @@ public class ServerConfig {
 	private int port = 29901;
 	private String publicHost;
 	private int publicPort;
-	private Long systemRangeStart;
-	private Long systemRangeEnd;
+	private List<SystemRange> systemRanges = List.of();
 	private Map<String, RemoteServerConfig> servers = new HashMap<>();
 	private String transferTokenSecret;
 	private int transferTokenExpirySeconds = 30;
@@ -35,8 +34,7 @@ public class ServerConfig {
 			this.port = args.getPort();
 		}
 		if (args.hasSystemRange()) {
-			this.systemRangeStart = args.getSystemRangeStart();
-			this.systemRangeEnd = args.getSystemRangeEnd();
+			this.systemRanges = List.of(new SystemRange(args.getSystemRangeStart(), args.getSystemRangeEnd()));
 		}
 		if (args.getPublicHost() != null) {
 			this.publicHost = args.getPublicHost();
@@ -104,20 +102,13 @@ public class ServerConfig {
 		this.publicPort = publicPort;
 	}
 
-	public Long getSystemRangeStart() {
-		return systemRangeStart;
+	/** The system ids this server runs; empty for a lobby or a shard given none. */
+	public List<SystemRange> getSystemRanges() {
+		return systemRanges;
 	}
 
-	public void setSystemRangeStart(Long systemRangeStart) {
-		this.systemRangeStart = systemRangeStart;
-	}
-
-	public Long getSystemRangeEnd() {
-		return systemRangeEnd;
-	}
-
-	public void setSystemRangeEnd(Long systemRangeEnd) {
-		this.systemRangeEnd = systemRangeEnd;
+	public void setSystemRanges(List<SystemRange> systemRanges) {
+		this.systemRanges = List.copyOf(systemRanges);
 	}
 
 	public Map<String, RemoteServerConfig> getServers() {
@@ -153,10 +144,7 @@ public class ServerConfig {
 	}
 
 	public boolean ownsSystem(long systemId) {
-		if (systemRangeStart == null || systemRangeEnd == null) {
-			return false;
-		}
-		return systemId >= systemRangeStart && systemId <= systemRangeEnd;
+		return SystemRange.anyContains(systemRanges, systemId);
 	}
 
 	public boolean isLobby() {

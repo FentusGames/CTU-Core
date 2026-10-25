@@ -1,13 +1,14 @@
 package ctu.core.server.config;
 
+import java.util.List;
+
 public class RemoteServerConfig {
 	private String host;
 	private int port;
 	private String publicHost;
 	private int publicPort;
 	private ServerType type;
-	private Long systemRangeStart;
-	private Long systemRangeEnd;
+	private List<SystemRange> systemRanges = List.of();
 
 	public RemoteServerConfig() {
 	}
@@ -60,26 +61,16 @@ public class RemoteServerConfig {
 		this.type = type;
 	}
 
-	public Long getSystemRangeStart() {
-		return systemRangeStart;
+	/** The system ids this server runs; empty for a lobby or a shard given none. */
+	public List<SystemRange> getSystemRanges() {
+		return systemRanges;
 	}
 
-	public void setSystemRangeStart(Long systemRangeStart) {
-		this.systemRangeStart = systemRangeStart;
-	}
-
-	public Long getSystemRangeEnd() {
-		return systemRangeEnd;
-	}
-
-	public void setSystemRangeEnd(Long systemRangeEnd) {
-		this.systemRangeEnd = systemRangeEnd;
+	public void setSystemRanges(List<SystemRange> systemRanges) {
+		this.systemRanges = List.copyOf(systemRanges);
 	}
 
 	public boolean ownsSystem(long systemId) {
-		if (systemRangeStart == null || systemRangeEnd == null) {
-			return false;
-		}
-		return systemId >= systemRangeStart && systemId <= systemRangeEnd;
+		return SystemRange.anyContains(systemRanges, systemId);
 	}
 }
